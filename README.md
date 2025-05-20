@@ -36,6 +36,8 @@ pip install -r requirements.txt
 
 ## Utilisation
 
+### Extraction des données
+
 Exécutez le script principal:
 
 ```bash
@@ -52,6 +54,31 @@ Le programme vous présentera un menu interactif avec les options suivantes:
 Les données extraites sont sauvegardées dans les fichiers suivants:
 - `anime_list.html` - HTML brut du catalogue
 - `anime_data.json` - Données structurées au format JSON
+
+### Stockage dans MongoDB
+
+Pour stocker les données extraites dans une base de données MongoDB, exécutez le script:
+
+```bash
+python add_to_db.py
+```
+
+Le script vous présentera un menu interactif avec les options suivantes:
+
+1. **Ajouter/mettre à jour depuis anime_data.json** - Importe les données JSON dans MongoDB
+2. **Afficher les statistiques de la base de données** - Montre le nombre de mangas et chapitres stockés
+3. **Rechercher un manga par titre** - Permet de rechercher un manga dans la base
+4. **Quitter** - Ferme le programme
+
+#### Configuration MongoDB
+
+Pour utiliser MongoDB, assurez-vous d'avoir un fichier `.env` contenant l'URL de connexion:
+
+```
+MONGO_URL=mongodb+srv://username:password@hostname/database?retryWrites=true&w=majority
+```
+
+Le script utilise la collection `SushiScan` spécifiée dans l'URL de connexion.
 
 ## Structure des données
 
@@ -98,6 +125,95 @@ Le fichier JSON généré contient une structure comme celle-ci:
     ]
   }
 ]
+```
+
+## Structure de la base de données MongoDB
+
+Les données extraites peuvent être stockées dans une base de données MongoDB à l'aide du script `add_to_db.py`. La structure de la base de données est organisée pour optimiser les requêtes et l'accès aux données.
+
+### Collection `mangas`
+
+Cette collection stocke les informations générales sur les mangas :
+
+```json
+{
+  "_id": "ObjectId(...)",
+  "title": "Nom du manga",
+  "alt_title": "Nom alternatif",
+  "url": "https://anime-sama.fr/catalogue/...",
+  "image_url": "https://anime-sama.fr/assets/images/...",
+  "genres": ["Action", "Drama", "..."],
+  "type": "Scans",
+  "language": "VOSTFR",
+  "scan_types": [
+    {
+      "name": "Scan VF",
+      "url": "https://anime-sama.fr/catalogue/...",
+      "chapters_count": 42
+    }
+  ],
+  "updated_at": "2025-05-20T14:30:00.000Z"
+}
+```
+
+### Collection `chapters`
+
+Cette collection stocke les informations détaillées sur chaque chapitre, avec une référence au manga parent :
+
+```json
+{
+  "_id": "ObjectId(...)",
+  "manga_title": "Nom du manga",
+  "scan_name": "Scan VF",
+  "number": "1",
+  "title": "Chapitre 1",
+  "reader_path": "reader.php?path=...",
+  "added_at": "2025-05-20T14:30:00.000Z"
+}
+```
+
+Ou pour les chapitres avec des URLs d'images :
+
+```json
+{
+  "_id": "ObjectId(...)",
+  "manga_title": "Nom du manga",
+  "scan_name": "Scan VF",
+  "number": "2",
+  "title": "Chapitre 2",
+  "image_urls": ["https://...", "https://..."],
+  "page_count": 24,
+  "added_at": "2025-05-20T14:30:00.000Z"
+}
+```
+
+### Indexation
+
+La base de données utilise plusieurs index pour optimiser les performances :
+
+1. Index unique sur le champ `title` dans la collection `mangas`
+2. Index composé unique sur les champs `manga_title`, `scan_name` et `number` dans la collection `chapters`
+
+### Accéder aux données
+
+Exemples de requêtes MongoDB pour accéder aux données :
+
+```javascript
+// Rechercher un manga par titre
+db.mangas.findOne({ title: "Nom du manga" })
+
+// Obtenir tous les chapitres d'un manga spécifique
+db.chapters.find({ manga_title: "Nom du manga" }).sort({ number: 1 })
+
+// Obtenir les chapitres d'un type de scan spécifique
+db.chapters.find({ manga_title: "Nom du manga", scan_name: "Scan VF" })
+
+// Trouver un chapitre spécifique
+db.chapters.findOne({ 
+  manga_title: "Nom du manga", 
+  scan_name: "Scan VF", 
+  number: "1" 
+})
 ```
 
 ## Notes techniques
