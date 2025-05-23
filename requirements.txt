@@ -5,7 +5,9 @@ dnspython==2.7.0
 git-filter-repo==2.47.0
 idna==3.10
 pymongo==4.13.0
+python-dotenv==1.0.0
 requests==2.32.3
+schedule==1.2.1
 soupsieve==2.7
 typing_extensions==4.13.2
 urllib3==2.4.0

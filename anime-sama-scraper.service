@@ -1,0 +1,19 @@
+# Configuration pour le service systemd
+# Fichier: /etc/systemd/system/anime-sama-scraper.service
+
+[Unit]
+Description=Anime-Sama Daily Scraper Service
+After=network.target
+
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=/path/to/AnimeSamaScrapper
+ExecStart=/usr/bin/python3 /path/to/AnimeSamaScrapper/daily_scraper.py --schedule
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
