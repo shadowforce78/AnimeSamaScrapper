@@ -108,6 +108,39 @@ detect_python() {
 # Détecter l'interpréteur Python approprié
 PYTHON_EXEC=$(detect_python "$INSTALL_PATH")
 
+# Vérifier si nous sommes dans un environnement géré en externe et créer un venv si nécessaire
+if [[ "$PYTHON_EXEC" != *"/venv/"* && "$PYTHON_EXEC" != *"/.venv/"* && "$PYTHON_EXEC" != *"/env/"* ]]; then
+    echo "Aucun environnement virtuel détecté. Vérification de la nécessité d'en créer un..."
+    
+    # Vérifier si nous sommes dans un environnement géré en externe
+    if "$PYTHON_EXEC" -c "import sys; sys.exit(0 if sys.prefix != sys.base_prefix else 1)" &> /dev/null; then
+        echo "Environnement virtuel actif détecté."
+    else
+        echo "Tentative de création d'un environnement virtuel..."
+        VENV_PATH="$INSTALL_PATH/.venv"
+        
+        # Vérifier si python3-venv est installé
+        if ! dpkg -l python3-venv &> /dev/null && ! dpkg -l python3-virtualenv &> /dev/null; then
+            echo "Installation de python3-venv..."
+            apt-get update && apt-get install -y python3-venv python3-full
+        fi
+        
+        # Créer l'environnement virtuel
+        if "$PYTHON_EXEC" -m venv "$VENV_PATH"; then
+            echo "Environnement virtuel créé avec succès à $VENV_PATH"
+            # Mettre à jour le chemin Python
+            if [ -f "$VENV_PATH/bin/python" ]; then
+                PYTHON_EXEC="$VENV_PATH/bin/python"
+            elif [ -f "$VENV_PATH/bin/python3" ]; then
+                PYTHON_EXEC="$VENV_PATH/bin/python3"
+            fi
+            echo "Nouvel interpréteur Python sélectionné: $PYTHON_EXEC"
+        else
+            echo "Avertissement: Impossible de créer un environnement virtuel. Tentative de continuer avec Python système."
+        fi
+    fi
+fi
+
 # Définir l'utilisateur qui exécutera le service
 read -p "Entrez le nom d'utilisateur qui exécutera le service: " SERVICE_USER
 if ! id "$SERVICE_USER" &>/dev/null; then
