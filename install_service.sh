@@ -28,13 +28,19 @@ detect_python() {
     local venv_paths=("$project_path/venv" "$project_path/.venv" "$project_path/env" "$project_path/.env")
     
     for venv_path in "${venv_paths[@]}"; do
+        # Chemins pour Linux
         if [ -f "$venv_path/bin/python" ]; then
-            echo "Environnement virtuel trouvé: $venv_path"
+            echo "Environnement virtuel trouvé: $venv_path (Linux)"
             python_exec="$venv_path/bin/python"
             break
         elif [ -f "$venv_path/bin/python3" ]; then
-            echo "Environnement virtuel trouvé: $venv_path"
+            echo "Environnement virtuel trouvé: $venv_path (Linux)"
             python_exec="$venv_path/bin/python3"
+            break
+        # Chemins pour Windows
+        elif [ -f "$venv_path/Scripts/python.exe" ]; then
+            echo "Environnement virtuel trouvé: $venv_path (Windows)"
+            python_exec="$venv_path/Scripts/python.exe"
             break
         fi
     done
