@@ -14,6 +14,100 @@ if [ ! -d "$INSTALL_PATH" ]; then
     exit 1
 fi
 
+# Fonction pour détecter l'interpréteur Python avec les packages requis
+detect_python() {
+    local project_path="$1"
+    local python_exec=""
+    
+    echo "Détection de l'environnement Python..."
+    
+    # Liste des packages requis
+    local required_packages=("requests" "beautifulsoup4" "pymongo" "python-dotenv")
+    
+    # 1. Chercher un environnement virtuel dans le projet
+    local venv_paths=("$project_path/venv" "$project_path/.venv" "$project_path/env" "$project_path/.env")
+    
+    for venv_path in "${venv_paths[@]}"; do
+        if [ -f "$venv_path/bin/python" ]; then
+            echo "Environnement virtuel trouvé: $venv_path"
+            python_exec="$venv_path/bin/python"
+            break
+        elif [ -f "$venv_path/bin/python3" ]; then
+            echo "Environnement virtuel trouvé: $venv_path"
+            python_exec="$venv_path/bin/python3"
+            break
+        fi
+    done
+    
+    # 2. Si pas d'environnement virtuel, utiliser le Python système
+    if [ -z "$python_exec" ]; then
+        echo "Aucun environnement virtuel trouvé, vérification du Python système..."
+        for py_cmd in "python3" "python"; do
+            if command -v "$py_cmd" &> /dev/null; then
+                python_exec=$(command -v "$py_cmd")
+                echo "Python système trouvé: $python_exec"
+                break
+            fi
+        done
+    fi
+    
+    # 3. Vérifier que Python est trouvé
+    if [ -z "$python_exec" ]; then
+        echo "Erreur: Aucun interpréteur Python trouvé!"
+        exit 1
+    fi
+    
+    # 4. Vérifier les packages requis
+    echo "Vérification des packages requis..."
+    local missing_packages=()
+    
+    for package in "${required_packages[@]}"; do
+        if ! "$python_exec" -c "import ${package//-/_}" &> /dev/null; then
+            missing_packages+=("$package")
+        fi
+    done
+    
+    # 5. Si des packages manquent, proposer de les installer
+    if [ ${#missing_packages[@]} -ne 0 ]; then
+        echo "Packages manquants: ${missing_packages[*]}"
+        echo "Installation des packages manquants..."
+        
+        # Essayer d'installer avec pip
+        local pip_cmd=""
+        if [ -f "$(dirname "$python_exec")/pip" ]; then
+            pip_cmd="$(dirname "$python_exec")/pip"
+        elif [ -f "$(dirname "$python_exec")/pip3" ]; then
+            pip_cmd="$(dirname "$python_exec")/pip3"
+        elif command -v pip3 &> /dev/null; then
+            pip_cmd="pip3"
+        elif command -v pip &> /dev/null; then
+            pip_cmd="pip"
+        else
+            echo "Erreur: pip non trouvé. Veuillez installer les packages manuellement:"
+            echo "  ${missing_packages[*]}"
+            exit 1
+        fi
+        
+        # Installer les packages manquants
+        for package in "${missing_packages[@]}"; do
+            echo "Installation de $package..."
+            if ! "$pip_cmd" install "$package"; then
+                echo "Erreur lors de l'installation de $package"
+                exit 1
+            fi
+        done
+    fi
+    
+    echo "Tous les packages requis sont disponibles."
+    echo "Interpréteur Python sélectionné: $python_exec"
+    
+    # Retourner le chemin Python
+    echo "$python_exec"
+}
+
+# Détecter l'interpréteur Python approprié
+PYTHON_EXEC=$(detect_python "$INSTALL_PATH")
+
 # Définir l'utilisateur qui exécutera le service
 read -p "Entrez le nom d'utilisateur qui exécutera le service: " SERVICE_USER
 if ! id "$SERVICE_USER" &>/dev/null; then
@@ -21,10 +115,29 @@ if ! id "$SERVICE_USER" &>/dev/null; then
     exit 1
 fi
 
-# Mise à jour du fichier de service
+# Vérifier que le fichier requirements.txt existe et installer les dépendances si nécessaire
+if [ -f "$INSTALL_PATH/requirements.txt" ]; then
+    echo "Installation des dépendances depuis requirements.txt..."
+    local pip_cmd=""
+    if [ -f "$(dirname "$PYTHON_EXEC")/pip" ]; then
+        pip_cmd="$(dirname "$PYTHON_EXEC")/pip"
+    elif [ -f "$(dirname "$PYTHON_EXEC")/pip3" ]; then
+        pip_cmd="$(dirname "$PYTHON_EXEC")/pip3"
+    elif command -v pip3 &> /dev/null; then
+        pip_cmd="pip3"
+    elif command -v pip &> /dev/null; then
+        pip_cmd="pip"
+    fi
+    
+    if [ -n "$pip_cmd" ]; then
+        "$pip_cmd" install -r "$INSTALL_PATH/requirements.txt"
+    fi
+fi
+
+# Mise à jour du fichier de service avec le bon interpréteur Python
 sed -i "s|User=youruser|User=$SERVICE_USER|g" "$INSTALL_PATH/anime-sama-scraper.service"
 sed -i "s|WorkingDirectory=/path/to/AnimeSamaScrapper|WorkingDirectory=$INSTALL_PATH|g" "$INSTALL_PATH/anime-sama-scraper.service"
-sed -i "s|ExecStart=/usr/bin/python3 /path/to/AnimeSamaScrapper/daily_scraper.py|ExecStart=/usr/bin/python3 $INSTALL_PATH/daily_scraper.py|g" "$INSTALL_PATH/anime-sama-scraper.service"
+sed -i "s|ExecStart=/usr/bin/python3 /path/to/AnimeSamaScrapper/daily_scraper.py|ExecStart=$PYTHON_EXEC $INSTALL_PATH/daily_scraper.py|g" "$INSTALL_PATH/anime-sama-scraper.service"
 
 # Copier le fichier de service
 cp "$INSTALL_PATH/anime-sama-scraper.service" /etc/systemd/system/
