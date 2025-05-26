@@ -118,7 +118,7 @@ fi
 # Vérifier que le fichier requirements.txt existe et installer les dépendances si nécessaire
 if [ -f "$INSTALL_PATH/requirements.txt" ]; then
     echo "Installation des dépendances depuis requirements.txt..."
-    local pip_cmd=""
+    pip_cmd=""
     if [ -f "$(dirname "$PYTHON_EXEC")/pip" ]; then
         pip_cmd="$(dirname "$PYTHON_EXEC")/pip"
     elif [ -f "$(dirname "$PYTHON_EXEC")/pip3" ]; then
@@ -130,14 +130,23 @@ if [ -f "$INSTALL_PATH/requirements.txt" ]; then
     fi
     
     if [ -n "$pip_cmd" ]; then
-        "$pip_cmd" install -r "$INSTALL_PATH/requirements.txt"
+        # Utilisation de --user pour éviter les problèmes d'environnement géré en externe
+        # ou installation dans l'environnement virtuel si détecté
+        if [[ "$PYTHON_EXEC" == *"/venv/"* || "$PYTHON_EXEC" == *"/.venv/"* || "$PYTHON_EXEC" == *"/env/"* ]]; then
+            "$pip_cmd" install -r "$INSTALL_PATH/requirements.txt"
+        else
+            "$pip_cmd" install --user -r "$INSTALL_PATH/requirements.txt"
+        fi
     fi
 fi
 
 # Mise à jour du fichier de service avec le bon interpréteur Python
 sed -i "s|User=youruser|User=$SERVICE_USER|g" "$INSTALL_PATH/anime-sama-scraper.service"
 sed -i "s|WorkingDirectory=/path/to/AnimeSamaScrapper|WorkingDirectory=$INSTALL_PATH|g" "$INSTALL_PATH/anime-sama-scraper.service"
-sed -i "s|ExecStart=/usr/bin/python3 /path/to/AnimeSamaScrapper/daily_scraper.py|ExecStart=$PYTHON_EXEC $INSTALL_PATH/daily_scraper.py|g" "$INSTALL_PATH/anime-sama-scraper.service"
+
+# Échappement correct des caractères spéciaux dans le chemin Python
+PYTHON_EXEC_ESCAPED=$(echo "$PYTHON_EXEC" | sed 's/[\/&]/\\&/g')
+sed -i "s|ExecStart=/usr/bin/python3 /path/to/AnimeSamaScrapper/daily_scraper.py|ExecStart=$PYTHON_EXEC_ESCAPED $INSTALL_PATH/daily_scraper.py|g" "$INSTALL_PATH/anime-sama-scraper.service"
 
 # Copier le fichier de service
 cp "$INSTALL_PATH/anime-sama-scraper.service" /etc/systemd/system/
