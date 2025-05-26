@@ -107,6 +107,7 @@ def insert_mangas_to_db(data):
                 'type': manga.get('type', ''),
                 'language': manga.get('language', ''),
                 'scan_types': manga.get('scan_types', []),
+                'total_chapters': sum(scan.get('chapters_count', 0) for scan in manga.get('scan_chapters', [])),
                 'updated_at': datetime.now()
             }
             
