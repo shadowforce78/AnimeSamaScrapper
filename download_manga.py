@@ -118,7 +118,7 @@ def get_chapters_for_manga(manga_title, scan_name=None):
         print(f"Erreur lors de la récupération des chapitres: {e}")
         return []
 
-def download_image(url, filepath, max_retries=3, convert_to_webp=True, webp_quality=85):
+def download_image(url, filepath, max_retries=3, convert_to_webp=True, webp_quality=60):
     """
     Télécharge une image avec gestion des erreurs et retry, et la convertit en WebP
     
@@ -127,7 +127,7 @@ def download_image(url, filepath, max_retries=3, convert_to_webp=True, webp_qual
         filepath (str): Chemin de destination
         max_retries (int): Nombre maximum de tentatives
         convert_to_webp (bool): Convertir en WebP pour réduire la taille
-        webp_quality (int): Qualité WebP (0-100)
+        webp_quality (int): Qualité WebP (0-100) - 60 pour compression agressive
         
     Returns:
         bool: True si téléchargement réussi, False sinon
@@ -139,9 +139,17 @@ def download_image(url, filepath, max_retries=3, convert_to_webp=True, webp_qual
             
             if convert_to_webp:
                 # Convertir l'image en WebP
-                try:
-                    # Charger l'image depuis les bytes
+                try:                    # Charger l'image depuis les bytes
                     image = Image.open(io.BytesIO(response.content))
+                    
+                    # Redimensionner l'image si elle est trop grande (max 1920x1080 pour économiser l'espace)
+                    max_width, max_height = 1920, 1080
+                    if image.width > max_width or image.height > max_height:
+                        # Calculer le ratio pour maintenir les proportions
+                        ratio = min(max_width / image.width, max_height / image.height)
+                        new_size = (int(image.width * ratio), int(image.height * ratio))
+                        image = image.resize(new_size, Image.Resampling.LANCZOS)
+                        print(f"      📏 Redimensionné: {image.width}x{image.height} → {new_size[0]}x{new_size[1]}")
                     
                     # Convertir en RGB si nécessaire (pour éviter les erreurs avec certains formats)
                     if image.mode in ('RGBA', 'LA', 'P'):
