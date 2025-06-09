@@ -3,7 +3,7 @@ import bs4 as bs
 import json
 import os
 import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, parse_qs
 
 url = "https://anime-sama.fr"
 catalog = "/catalogue"
@@ -93,9 +93,15 @@ def refine_data(html_file_path):
 
         if data:  # Add data only if some information was extracted
             # Conserver tous les items qui contiennent "Scans" ou "Manhwa" dans leur type
-            if "type" in data and ("Scans" in data["type"] or "Manhwa" in data["type"] or "manhwa" in data["type"].lower()):
+            if "type" in data and (
+                "Scans" in data["type"]
+                or "Manhwa" in data["type"]
+                or "manhwa" in data["type"].lower()
+            ):
                 anime_items.append(data)
-                print(f"Item trouvé avec type '{data['type']}': {data.get('title', 'Sans titre')}")
+                print(
+                    f"Item trouvé avec type '{data['type']}': {data.get('title', 'Sans titre')}"
+                )
 
     print(f"Total des items 'Scans' ou 'Manhwa' trouvés: {len(anime_items)}")
     return json.dumps(anime_items, indent=4, ensure_ascii=False)
@@ -418,15 +424,55 @@ def get_scan_chapters(anime_data_list):
                 except Exception as e:
                     print(
                         f"  An unexpected error occurred while processing {scan_name}: {e}"
-                    )
-
-            # Si nous avons trouvé des données de chapitres, les ajouter à l'élément
+                    )  # Si nous avons trouvé des données de chapitres, les ajouter à l'élément
             if scan_chapters_data:
                 current_item_copy["scan_chapters"] = scan_chapters_data
 
         updated_anime_data_list.append(current_item_copy)
 
     return updated_anime_data_list
+
+
+def convert_google_drive_url(url):
+    """
+    Convertit une URL Google Drive de visualisation vers une URL de téléchargement direct.
+
+    Args:
+        url (str): URL Google Drive de visualisation
+
+    Returns:
+        str: URL de téléchargement direct ou URL originale si conversion impossible
+    """
+    try:
+        # Vérifier si c'est un lien Google Drive
+        if "drive.google.com" not in url:
+            return url
+
+        # Pattern pour extraire l'ID du fichier Google Drive
+        patterns = [
+            r"drive\.google\.com/uc\?export=view&id=([a-zA-Z0-9_-]+)",  # Format uc?export=view&id=
+            r"drive\.google\.com/file/d/([a-zA-Z0-9_-]+)",  # Format file/d/ID
+            r"id=([a-zA-Z0-9_-]+)",  # Recherche générale d'ID
+        ]
+
+        file_id = None
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                file_id = match.group(1)
+                break
+
+        # Si aucun ID trouvé, retourner l'URL originale
+        if not file_id:
+            return url
+
+        # Construire l'URL de téléchargement direct
+        download_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=view&authuser=0"
+        return download_url
+
+    except Exception as e:
+        print(f"  Erreur lors de la conversion de l'URL Google Drive: {e}")
+        return url
 
 
 def parse_episodes_js(raw_content):
@@ -441,11 +487,15 @@ def parse_episodes_js(raw_content):
         chapter_matches1 = re.findall(chapter_pattern1, raw_content)
 
         for chapter_num, reader_path, title in chapter_matches1:
+            # Convertir les URLs Google Drive en liens de téléchargement direct si nécessaire
+            converted_reader_path = convert_google_drive_url(reader_path)
             chapters.append(
-                {"number": chapter_num, "title": title, "reader_path": reader_path}
-            )
-
-        # Pattern 2: recherche alternative si le premier pattern ne fonctionne pas
+                {
+                    "number": chapter_num,
+                    "title": title,
+                    "reader_path": converted_reader_path,
+                }
+            )  # Pattern 2: recherche alternative si le premier pattern ne fonctionne pas
         if not chapters:
             chapter_pattern2 = r'eps\["([^"]+)"\]\s*=\s*\{([^}]+)\};'
             chapter_matches2 = re.findall(chapter_pattern2, raw_content)
@@ -456,6 +506,8 @@ def parse_episodes_js(raw_content):
 
                 if reader_path_match:
                     reader_path = reader_path_match.group(1)
+                    # Convertir les URLs Google Drive en liens de téléchargement direct si nécessaire
+                    converted_reader_path = convert_google_drive_url(reader_path)
                     title = (
                         title_match.group(1)
                         if title_match
@@ -466,42 +518,51 @@ def parse_episodes_js(raw_content):
                         {
                             "number": chapter_num,
                             "title": title,
-                            "reader_path": reader_path,
+                            "reader_path": converted_reader_path,
                         }
-                    )
-
-        # Pattern 3: format différent possible
+                    )  # Pattern 3: format différent possible
         if not chapters:
             chapter_pattern3 = r'eps\.([^.]+)\s*=\s*\{\s*"r"\s*:\s*"([^"]+)"\s*,\s*"t"\s*:\s*"([^"]+)"\s*\};'
             chapter_matches3 = re.findall(chapter_pattern3, raw_content)
 
             for chapter_num, reader_path, title in chapter_matches3:
+                # Convertir les URLs Google Drive en liens de téléchargement direct si nécessaire
+                converted_reader_path = convert_google_drive_url(reader_path)
                 chapters.append(
-                    {"number": chapter_num, "title": title, "reader_path": reader_path}
+                    {
+                        "number": chapter_num,
+                        "title": title,
+                        "reader_path": converted_reader_path,
+                    }
                 )
-                
+
         # Pattern 4: format avec tableaux d'URLs d'images (var eps1= ['url1', 'url2', ...])
         if not chapters:
-            chapter_pattern4 = r'var\s+eps(\d+)\s*=\s*\[(.*?)\];'
+            chapter_pattern4 = r"var\s+eps(\d+)\s*=\s*\[(.*?)\];"
             chapter_matches4 = re.findall(chapter_pattern4, raw_content, re.DOTALL)
-            
+
             for chapter_num, urls_content in chapter_matches4:
                 # Extraction des URLs des images
-                urls = re.findall(r'\'([^\']+)\'|"([^"]+)"', urls_content)
-                # Fusionner les groupes capturés (soit le premier soit le deuxième groupe contient l'URL)
+                urls = re.findall(
+                    r'\'([^\']+)\'|"([^"]+)"', urls_content
+                )  # Fusionner les groupes capturés (soit le premier soit le deuxième groupe contient l'URL)
                 image_urls = []
                 for url_match in urls:
                     url = url_match[0] if url_match[0] else url_match[1]
                     if url:
-                        image_urls.append(url)
-                
+                        # Convertir les URLs Google Drive en liens de téléchargement direct
+                        converted_url = convert_google_drive_url(url)
+                        image_urls.append(converted_url)
+
                 if image_urls:
-                    chapters.append({
-                        "number": chapter_num,
-                        "title": f"Chapitre {chapter_num}",
-                        "image_urls": image_urls,
-                        "page_count": len(image_urls)
-                    })
+                    chapters.append(
+                        {
+                            "number": chapter_num,
+                            "title": f"Chapitre {chapter_num}",
+                            "image_urls": image_urls,
+                            "page_count": len(image_urls),
+                        }
+                    )
 
         # Trier les chapitres par numéro
         def chapter_sort_key(chapter):

@@ -221,6 +221,9 @@ db.chapters.findOne({
 - Le script supporte plusieurs formats de données dans le fichier episodes.js:
   - Format objet : `eps["1"] = {"r":"reader.php?path=...","t":"Chapitre 1"};`
   - Format tableau : `var eps1= ['url1', 'url2', ...];`
+- **Conversion automatique des URLs Google Drive** : Le script détecte et convertit automatiquement les liens Google Drive de visualisation vers des liens de téléchargement direct :
+  - De : `https://drive.google.com/uc?export=view&id=ID_FICHIER`
+  - Vers : `https://drive.usercontent.google.com/download?id=ID_FICHIER&export=view&authuser=0`
 - Plusieurs méthodes de fallback sont implémentées pour gérer les différentes structures de page
 - Des délais sont intégrés pour éviter de surcharger le serveur
 
