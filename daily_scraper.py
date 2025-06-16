@@ -3,7 +3,7 @@
 """
 Script de scraping automatique pour Anime-Sama
 Exécuté quotidiennement à minuit pour mettre à jour la base de données MongoDB
-avec les derniers mangas et chapitres disponibles.
+avec les derniers mangas disponibles (métadonnées uniquement).
 """
 
 import os
@@ -14,7 +14,7 @@ import logging
 from datetime import datetime
 import schedule
 import requests
-from main import get_anime_list, refine_data, fetch_scan_page_urls, get_scan_chapters
+from main import get_anime_list, refine_data
 from add_to_db import insert_mangas_to_db, test_connection
 
 # Configuration du logging
@@ -68,11 +68,10 @@ def scrape_and_update_db():
         if not refined_anime_data_json_string:
             logger.error("Échec du raffinement des données. Arrêt du processus.")
             return False
-        
-        # Conversion en objet Python
+          # Conversion en objet Python
         try:
             anime_data_list = json.loads(refined_anime_data_json_string)
-            logger.info(f"Données raffinées avec succès. {len(anime_data_list)} mangas/scans trouvés.")
+            logger.info(f"Données raffinées avec succès. {len(anime_data_list)} mangas trouvés.")
             
             # Sauvegarde des données raffinées
             with open(ANIME_DATA_JSON_FILE, "w", encoding="utf-8") as json_file_out:
@@ -82,29 +81,10 @@ def scrape_and_update_db():
         except json.JSONDecodeError as e:
             logger.error(f"Erreur lors de la conversion JSON: {e}")
             return False
-        
-        # Étape 4: Récupérer les types de scans pour chaque manga/anime
-        logger.info("Récupération des types de scans disponibles...")
-        anime_data_list = fetch_scan_page_urls(anime_data_list)
-        
-        # Sauvegarde intermédiaire après récupération des types de scans
-        with open(ANIME_DATA_JSON_FILE, "w", encoding="utf-8") as json_file_out:
-            json.dump(anime_data_list, json_file_out, indent=4, ensure_ascii=False)
-        logger.info("Types de scans récupérés et sauvegardés.")
-        
-        # Étape 5: Récupérer les chapitres de chaque scan
-        logger.info("Récupération des chapitres disponibles...")
-        anime_data_list = get_scan_chapters(anime_data_list)
-        
-        # Sauvegarde finale des données complètes
-        with open(ANIME_DATA_JSON_FILE, "w", encoding="utf-8") as json_file_out:
-            json.dump(anime_data_list, json_file_out, indent=4, ensure_ascii=False)
-        logger.info("Chapitres récupérés et sauvegardés.")
-        
-        # Étape 6: Insérer ou mettre à jour les données dans MongoDB
+          # Étape 4: Insérer ou mettre à jour les données dans MongoDB
         logger.info("Mise à jour de la base de données MongoDB...")
         nb_mangas_added, nb_chapters_added = insert_mangas_to_db(anime_data_list)
-        logger.info(f"Base de données mise à jour avec succès: {nb_mangas_added} nouveaux mangas, {nb_chapters_added} nouveaux chapitres.")
+        logger.info(f"Base de données mise à jour avec succès: {nb_mangas_added} nouveaux mangas.")
         
         # Calculer le temps d'exécution total
         execution_time = time.time() - start_time

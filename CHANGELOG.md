@@ -4,20 +4,24 @@
 
 ### 🔄 Changements majeurs
 
-**Suppression du scrapping des images de chapitre :**
+**Suppression du scrapping des images de chapitre et des liens de scans :**
 - Retrait du Pattern 4 dans `parse_episodes_js()` qui extrayait les URLs d'images
 - Suppression de la sauvegarde des `image_urls` et `page_count` dans la base de données MongoDB
 - Conservation uniquement des informations relatives au manga (titre, numéro de chapitre, reader_path)
+- **Suppression complète du scrapping des liens de scans dans `daily_scraper.py`**
 
 **Fichiers modifiés :**
 - `main.py` : Suppression du Pattern 4 (lignes ~538-565)
 - `add_to_db.py` : Retrait de la logique de sauvegarde des `image_urls`
+- `daily_scraper.py` : Suppression des étapes 4 et 5 (fetch_scan_page_urls et get_scan_chapters)
 - `README.md` : Mise à jour de la documentation pour refléter les changements
 
 **Impact :**
 - Le projet ne récupère plus les URLs des images individuelles des chapitres
-- Focus exclusif sur les métadonnées des mangas et informations de base des chapitres
-- Réduction de la complexité et de la charge sur les serveurs
+- Le projet ne récupère plus les liens vers les pages de scans
+- Focus exclusif sur les métadonnées des mangas du catalogue uniquement
+- Réduction significative de la complexité et de la charge sur les serveurs
+- Le daily_scraper est maintenant beaucoup plus léger et rapide
 
 ---
 
