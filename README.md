@@ -1,17 +1,17 @@
 # AnimeSamaScrapper
 
-Un outil d'extraction de données pour le site Anime-Sama.fr, spécialisé dans la récupération des mangas, manhwas et leurs chapitres.
+Un outil d'extraction de données pour le site Anime-Sama.fr, spécialisé dans la récupération des informations des mangas, manhwas et leurs chapitres.
 
 ## Description
 
-AnimeSamaScrapper est un script Python qui permet d'extraire le catalogue complet des mangas et manhwas disponibles sur Anime-Sama.fr, ainsi que leurs chapitres et pages. Cet outil est particulièrement utile pour les utilisateurs qui souhaitent explorer ou archiver les données du site.
+AnimeSamaScrapper est un script Python qui permet d'extraire le catalogue complet des mangas et manhwas disponibles sur Anime-Sama.fr, ainsi que les informations de leurs chapitres. Cet outil est particulièrement utile pour les utilisateurs qui souhaitent explorer ou archiver les métadonnées du site.
 
 ## Fonctionnalités
 
 - Extraction du catalogue complet d'Anime-Sama.fr
 - Filtrage des entrées par type (Scans et Manhwa uniquement)
 - Identification des différents types de scans disponibles (VF, Spécial VF, etc.)
-- Récupération des chapitres disponibles pour chaque manga
+- Récupération des informations des chapitres disponibles pour chaque manga
 - Support de différents formats de fichiers episodes.js
 
 ## Prérequis
@@ -106,19 +106,16 @@ Le fichier JSON généré contient une structure comme celle-ci:
         "url": "https://anime-sama.fr/catalogue/...",
         "id_scan": "123456",
         "episodes_url": "https://anime-sama.fr/catalogue/.../episodes.js?filever=123456",
-        "total_chapters": 42,
-        "chapters": [
+        "total_chapters": 42,        "chapters": [
           {
             "number": "1",
             "title": "Chapitre 1",
             "reader_path": "reader.php?path=..."
           },
-          // ou format avec URLs d'images
           {
             "number": "2",
             "title": "Chapitre 2",
-            "image_urls": ["https://...", "https://..."],
-            "page_count": 24
+            "reader_path": "reader.php?path=..."
           }
         ]
       }
@@ -172,21 +169,6 @@ Cette collection stocke les informations détaillées sur chaque chapitre, avec 
 }
 ```
 
-Ou pour les chapitres avec des URLs d'images :
-
-```json
-{
-  "_id": "ObjectId(...)",
-  "manga_title": "Nom du manga",
-  "scan_name": "Scan VF",
-  "number": "2",
-  "title": "Chapitre 2",
-  "image_urls": ["https://...", "https://..."],
-  "page_count": 24,
-  "added_at": "2025-05-20T14:30:00.000Z"
-}
-```
-
 ### Indexation
 
 La base de données utilise plusieurs index pour optimiser les performances :
@@ -218,9 +200,8 @@ db.chapters.findOne({
 
 ## Notes techniques
 
-- Le script supporte plusieurs formats de données dans le fichier episodes.js:
+- Le script supporte le format de données dans le fichier episodes.js:
   - Format objet : `eps["1"] = {"r":"reader.php?path=...","t":"Chapitre 1"};`
-  - Format tableau : `var eps1= ['url1', 'url2', ...];`
 - **Conversion automatique des URLs Google Drive** : Le script détecte et convertit automatiquement les liens Google Drive de visualisation vers des liens de téléchargement direct :
   - De : `https://drive.google.com/uc?export=view&id=ID_FICHIER`
   - Vers : `https://drive.usercontent.google.com/download?id=ID_FICHIER&export=view&authuser=0`
@@ -229,7 +210,7 @@ db.chapters.findOne({
 
 ## Aspects juridiques
 
-Ce script est fourni à des fins éducatives uniquement. Veuillez respecter les conditions d'utilisation du site Anime-Sama.fr et les droits d'auteur des contenus. N'utilisez pas cet outil pour télécharger ou distribuer des contenus protégés sans autorisation.
+Ce script est fourni à des fins éducatives uniquement. Veuillez respecter les conditions d'utilisation du site Anime-Sama.fr et les droits d'auteur des contenus. N'utilisez pas cet outil pour accéder à des contenus protégés sans autorisation.
 
 ## Contribution
 

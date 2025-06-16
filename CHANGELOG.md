@@ -1,3 +1,26 @@
+# CHANGELOG - AnimeSamaScrapper
+
+## Version 2.1.0 - Suppression du scrapping d'images (16 juin 2025)
+
+### 🔄 Changements majeurs
+
+**Suppression du scrapping des images de chapitre :**
+- Retrait du Pattern 4 dans `parse_episodes_js()` qui extrayait les URLs d'images
+- Suppression de la sauvegarde des `image_urls` et `page_count` dans la base de données MongoDB
+- Conservation uniquement des informations relatives au manga (titre, numéro de chapitre, reader_path)
+
+**Fichiers modifiés :**
+- `main.py` : Suppression du Pattern 4 (lignes ~538-565)
+- `add_to_db.py` : Retrait de la logique de sauvegarde des `image_urls`
+- `README.md` : Mise à jour de la documentation pour refléter les changements
+
+**Impact :**
+- Le projet ne récupère plus les URLs des images individuelles des chapitres
+- Focus exclusif sur les métadonnées des mangas et informations de base des chapitres
+- Réduction de la complexité et de la charge sur les serveurs
+
+---
+
 # Modifications apportées - Conversion des URLs Google Drive
 
 ## Résumé des changements
@@ -35,11 +58,6 @@ converted_reader_path = convert_google_drive_url(reader_path)
 **Pattern 3 :** Conversion des `reader_path` du format eps.X
 ```python
 converted_reader_path = convert_google_drive_url(reader_path)
-```
-
-**Pattern 4 :** Conversion des URLs d'images dans les tableaux
-```python
-converted_url = convert_google_drive_url(url)
 ```
 
 ### 3. Import ajouté

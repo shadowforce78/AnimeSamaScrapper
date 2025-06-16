@@ -3,7 +3,7 @@ import bs4 as bs
 import json
 import os
 import re
-from urllib.parse import urljoin, urlparse, parse_qs
+from urllib.parse import urljoin
 
 url = "https://anime-sama.fr"
 catalog = "/catalogue"
@@ -534,35 +534,8 @@ def parse_episodes_js(raw_content):
                         "title": title,
                         "reader_path": converted_reader_path,
                     }
-                )
-
-        # Pattern 4: format avec tableaux d'URLs d'images (var eps1= ['url1', 'url2', ...])
-        if not chapters:
-            chapter_pattern4 = r"var\s+eps(\d+)\s*=\s*\[(.*?)\];"
-            chapter_matches4 = re.findall(chapter_pattern4, raw_content, re.DOTALL)
-
-            for chapter_num, urls_content in chapter_matches4:
-                # Extraction des URLs des images
-                urls = re.findall(
-                    r'\'([^\']+)\'|"([^"]+)"', urls_content
-                )  # Fusionner les groupes capturés (soit le premier soit le deuxième groupe contient l'URL)
-                image_urls = []
-                for url_match in urls:
-                    url = url_match[0] if url_match[0] else url_match[1]
-                    if url:
-                        # Convertir les URLs Google Drive en liens de téléchargement direct
-                        converted_url = convert_google_drive_url(url)
-                        image_urls.append(converted_url)
-
-                if image_urls:
-                    chapters.append(
-                        {
-                            "number": chapter_num,
-                            "title": f"Chapitre {chapter_num}",
-                            "image_urls": image_urls,
-                            "page_count": len(image_urls),
-                        }
-                    )
+                )  # Pattern 4 supprimé : ne plus extraire les URLs d'images des chapitres
+        # Seules les informations de base du manga sont conservées
 
         # Trier les chapitres par numéro
         def chapter_sort_key(chapter):

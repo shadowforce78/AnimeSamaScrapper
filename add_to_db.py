@@ -84,13 +84,9 @@ def insert_mangas_to_db(data):
                                 'title': chapter['title'],
                                 'added_at': datetime.now()
                             }
-                            
-                            # Ajout du chemin du reader ou des URLs des images
+                              # Ajout du chemin du reader seulement (plus d'images)
                             if 'reader_path' in chapter:
                                 chapter_doc['reader_path'] = chapter['reader_path']
-                            if 'image_urls' in chapter:
-                                chapter_doc['image_urls'] = chapter['image_urls']
-                                chapter_doc['page_count'] = chapter.get('page_count', len(chapter['image_urls']))
                             
                             chapters_data.append(chapter_doc)
                         
