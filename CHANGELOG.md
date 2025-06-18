@@ -1,5 +1,60 @@
 # CHANGELOG - AnimeSamaScrapper
 
+## Version 2.2.0 - Amélioration du comptage des chapitres et des pages (16 juin 2025)
+
+### 🚀 Nouvelles fonctionnalités
+
+**Comptage automatique des chapitres et des pages :**
+- Ajout du comptage automatique du nombre total de chapitres par manga
+- Ajout du comptage du nombre de pages par chapitre lorsque disponible
+- Nouvelle fonction `count_pages_in_chapter()` pour analyser les patterns d'images
+- Restauration partielle du Pattern 4 pour détecter les URLs d'images (comptage uniquement, sans stockage)
+
+**Amélioration de la structure des données :**
+- La fonction `parse_episodes_js()` retourne maintenant un dictionnaire avec :
+  - `total_chapters`: Le nombre total de chapitres
+  - `chapters`: Liste des chapitres avec leurs informations détaillées
+- Chaque chapitre inclut maintenant le champ `page_count` avec le nombre de pages détectées
+- Affichage du nombre total de pages dans les logs de traitement
+
+**Amélioration des patterns de détection :**
+- Support amélioré pour différents formats de fichiers episodes.js
+- Détection des images indexées : `eps["1"][0] = "image1.jpg";`
+- Détection des tableaux d'images : `eps["1"] = ["url1", "url2", ...];`
+- Gestion des cas où aucune page n'est détectable (retourne 0)
+
+**Fichiers modifiés :**
+- `main.py` : Ajout de `count_pages_in_chapter()` et amélioration de `parse_episodes_js()`
+- `main.py` : Mise à jour de `get_scan_chapters()` pour utiliser la nouvelle structure
+
+**Impact sur les données JSON :**
+- Structure enrichie avec informations de comptage :
+```json
+{
+  "scan_chapters": [
+    {
+      "name": "Scan VF",
+      "total_chapters": 42,
+      "chapters": [
+        {
+          "number": "1",
+          "title": "Chapitre 1",
+          "reader_path": "...",
+          "page_count": 18
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Compatibilité :**
+- Rétrocompatible avec les données existantes
+- Gestion gracieuse des cas où le comptage de pages n'est pas possible
+- Préservation de toutes les fonctionnalités existantes (conversion Google Drive, etc.)
+
+---
+
 ## Version 2.1.0 - Suppression du scrapping d'images (16 juin 2025)
 
 ### 🔄 Changements majeurs

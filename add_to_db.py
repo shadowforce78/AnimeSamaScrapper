@@ -74,17 +74,25 @@ def insert_mangas_to_db(data):
                 for scan_type in scan_chapters:
                     if 'chapters' in scan_type:
                         chapters = scan_type.pop('chapters')
-                        
-                        # Préparation des chapitres pour insertion
+                          # Préparation des chapitres pour insertion
                         for chapter in chapters:
                             chapter_doc = {
                                 'manga_title': manga['title'],
                                 'scan_name': scan_type['name'],
                                 'number': chapter['number'],
                                 'title': chapter['title'],
-                                'added_at': datetime.now()
+                                'page_count': chapter.get('page_count', 0),
+                                'scan_id': scan_type.get('id_scan'),
+                                'episodes_url': scan_type.get('episodes_url'),
+                                'added_at': datetime.now(),
+                                'updated_at': datetime.now()
                             }
-                              # Ajout du chemin du reader seulement (plus d'images)
+                            
+                            # Ajout des URLs d'images si disponibles
+                            if 'image_urls' in chapter:
+                                chapter_doc['image_urls'] = chapter['image_urls']
+                            
+                            # Ajout du chemin du reader (compatibilité)
                             if 'reader_path' in chapter:
                                 chapter_doc['reader_path'] = chapter['reader_path']
                             
@@ -92,8 +100,7 @@ def insert_mangas_to_db(data):
                         
                         # Remettre la liste vide de chapitres dans scan_type
                         scan_type['chapters_count'] = len(chapters)
-            
-            # Ajout des métadonnées du manga
+              # Ajout des métadonnées du manga
             manga_doc = {
                 'title': manga['title'],
                 'alt_title': manga.get('alt_title', ''),
@@ -103,7 +110,12 @@ def insert_mangas_to_db(data):
                 'type': manga.get('type', ''),
                 'language': manga.get('language', ''),
                 'scan_types': manga.get('scan_types', []),
-                'total_chapters': sum(scan.get('chapters_count', 0) for scan in manga.get('scan_chapters', [])),
+                'scan_chapters': manga.get('scan_chapters', []),
+                'total_chapters': sum(scan.get('total_chapters', 0) for scan in manga.get('scan_chapters', [])),
+                'total_pages': sum(
+                    sum(chapter.get('page_count', 0) for chapter in scan.get('chapters', []))
+                    for scan in manga.get('scan_chapters', [])
+                ),
                 'updated_at': datetime.now()
             }
             
@@ -187,10 +199,9 @@ def get_manga_stats():
         print(f"\nStatistiques MongoDB:")
         print(f"- Nombre de mangas: {manga_count}")
         print(f"- Nombre de chapitres: {chapter_count}")
-        
-        # Top 5 des mangas avec le plus de chapitres
+          # Top 5 des mangas avec le plus de chapitres
         pipeline = [
-            {"$group": {"_id": "$manga_title", "chapter_count": {"$sum": 1}}},
+            {"$group": {"_id": "$manga_title", "chapter_count": {"$sum": 1}, "total_pages": {"$sum": "$page_count"}}},
             {"$sort": {"chapter_count": -1}},
             {"$limit": 5}
         ]
@@ -200,7 +211,20 @@ def get_manga_stats():
         if top_mangas:
             print("\nTop 5 des mangas avec le plus de chapitres:")
             for idx, manga in enumerate(top_mangas, 1):
-                print(f"{idx}. {manga['_id']} - {manga['chapter_count']} chapitres")
+                pages_info = f" ({manga.get('total_pages', 0)} pages)" if manga.get('total_pages', 0) > 0 else ""
+                print(f"{idx}. {manga['_id']} - {manga['chapter_count']} chapitres{pages_info}")
+        
+        # Statistiques sur les pages
+        pipeline_pages = [
+            {"$group": {"_id": None, "total_pages": {"$sum": "$page_count"}, "avg_pages_per_chapter": {"$avg": "$page_count"}}},
+        ]
+        
+        page_stats = list(chapters_collection.aggregate(pipeline_pages))
+        if page_stats:
+            stats = page_stats[0]
+            print(f"\nStatistiques des pages:")
+            print(f"- Nombre total de pages: {stats.get('total_pages', 0)}")
+            print(f"- Moyenne de pages par chapitre: {stats.get('avg_pages_per_chapter', 0):.1f}")
                 
     except Exception as e:
         print(f"Erreur lors de la récupération des statistiques: {e}")
@@ -216,12 +240,20 @@ def search_manga(query):
     try:
         # Recherche avec une expression régulière (insensible à la casse)
         regex_query = {"title": {"$regex": query, "$options": "i"}}
-        results = list(mangas_collection.find(regex_query, {"title": 1, "genres": 1, "type": 1}))
+        results = list(mangas_collection.find(regex_query, {
+            "title": 1, 
+            "genres": 1, 
+            "type": 1, 
+            "total_chapters": 1, 
+            "total_pages": 1
+        }))
         
         if results:
             print(f"\nRésultats de recherche pour '{query}' ({len(results)} trouvés):")
             for idx, manga in enumerate(results, 1):
-                print(f"{idx}. {manga['title']} - {manga.get('type', 'N/A')} - Genres: {', '.join(manga.get('genres', ['N/A']))}")
+                chapters_info = f" - {manga.get('total_chapters', 0)} chapitres"
+                pages_info = f" ({manga.get('total_pages', 0)} pages)" if manga.get('total_pages', 0) > 0 else ""
+                print(f"{idx}. {manga['title']} - {manga.get('type', 'N/A')}{chapters_info}{pages_info} - Genres: {', '.join(manga.get('genres', ['N/A']))}")
         else:
             print(f"Aucun manga trouvé pour la recherche '{query}'")
             
@@ -237,8 +269,7 @@ if __name__ == "__main__":
     if not test_connection():
         print("Impossible de se connecter à la base de données. Vérifiez votre connexion et vos identifiants.")
         sys.exit(1)
-    
-    # Menu principal
+      # Menu principal
     while True:
         print("\nOptions:")
         print("1. Ajouter/mettre à jour depuis anime_data.json")
@@ -257,6 +288,17 @@ if __name__ == "__main__":
                 print(f"\nAjout de {len(data)} mangas à la base de données...")
                 nb_mangas, nb_chapters = insert_mangas_to_db(data)
                 print(f"\nOpération terminée. {nb_mangas} nouveaux mangas et {nb_chapters} nouveaux chapitres ajoutés.")
+                
+                # Afficher un résumé des données ajoutées
+                if nb_chapters > 0:
+                    # Calculer le total de pages ajoutées
+                    total_pages = sum(
+                        sum(chapter.get('page_count', 0) for chapter in scan.get('chapters', []))
+                        for manga in data
+                        for scan in manga.get('scan_chapters', [])
+                    )
+                    print(f"Total de pages indexées: {total_pages}")
+                    print(f"Moyenne de pages par chapitre: {total_pages/nb_chapters:.1f}" if nb_chapters > 0 else "0")
         
         elif choice == "2":
             # Afficher les statistiques

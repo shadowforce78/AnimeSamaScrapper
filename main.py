@@ -397,23 +397,33 @@ def get_scan_chapters(anime_data_list):
                         continue
 
                     # Récupérer le contenu brut
-                    raw_content = episodes_response.text
+                    raw_content = (
+                        episodes_response.text
+                    )  # Analyser le contenu JavaScript pour extraire les données des chapitres
+                    chapters_result = parse_episodes_js(raw_content)
 
-                    # Analyser le contenu JavaScript pour extraire les données des chapitres
-                    chapters_data = parse_episodes_js(raw_content)
+                    if chapters_result and chapters_result.get("chapters"):
+                        chapters_data = chapters_result["chapters"]
+                        total_chapters = chapters_result["total_chapters"]
 
-                    if chapters_data:
                         # Ajouter les informations récupérées
                         scan_chapters_info = {
                             "name": scan_name,
                             "url": scan_url,
                             "id_scan": id_scan,
                             "episodes_url": episodes_url,
-                            "total_chapters": len(chapters_data),
+                            "total_chapters": total_chapters,
                             "chapters": chapters_data,
                         }
                         scan_chapters_data.append(scan_chapters_info)
-                        print(f"  Added {len(chapters_data)} chapters for {scan_name}")
+                        print(f"  Added {total_chapters} chapters for {scan_name}")
+
+                        # Afficher un résumé des pages par chapitre
+                        total_pages = sum(
+                            chapter.get("page_count", 0) for chapter in chapters_data
+                        )
+                        if total_pages > 0:
+                            print(f"  Total pages across all chapters: {total_pages}")
                     else:
                         print(f"  No chapters found in episodes.js for {scan_name}")
 
@@ -478,83 +488,155 @@ def convert_google_drive_url(url):
 def parse_episodes_js(raw_content):
     """
     Analyser le contenu JavaScript du fichier episodes.js pour extraire les données des chapitres.
+    Le format réel est: var eps[numero] = [array_of_image_urls];
+
+    Returns:
+        dict: {
+            'total_chapters': int,
+            'chapters': list of dict with chapter info including page_count and image_urls
+        }
     """
     chapters = []
 
     try:
-        # Pattern 1: recherche les définitions de chapitres du type eps["1"] = {"r":"reader.php?path=...","t":"Chapitre 1"};
-        chapter_pattern1 = r'eps\["([^"]+)"\]\s*=\s*\{\s*"r"\s*:\s*"([^"]+)"\s*,\s*"t"\s*:\s*"([^"]+)"\s*\};'
-        chapter_matches1 = re.findall(chapter_pattern1, raw_content)
+        # Pattern principal: var eps[numero] = [tableau d'URLs];
+        # Recherche les variables JavaScript de type "var eps17= [...];"
+        chapter_pattern = r"var eps(\d+)=\s*\[(.*?)\];"
+        chapter_matches = re.findall(chapter_pattern, raw_content, re.DOTALL)
 
-        for chapter_num, reader_path, title in chapter_matches1:
-            # Convertir les URLs Google Drive en liens de téléchargement direct si nécessaire
-            converted_reader_path = convert_google_drive_url(reader_path)
-            chapters.append(
-                {
-                    "number": chapter_num,
-                    "title": title,
-                    "reader_path": converted_reader_path,
-                }
-            )  # Pattern 2: recherche alternative si le premier pattern ne fonctionne pas
-        if not chapters:
-            chapter_pattern2 = r'eps\["([^"]+)"\]\s*=\s*\{([^}]+)\};'
-            chapter_matches2 = re.findall(chapter_pattern2, raw_content)
+        print(f"  Found {len(chapter_matches)} chapter definitions")
 
-            for chapter_num, props in chapter_matches2:
-                reader_path_match = re.search(r'"r"\s*:\s*"([^"]+)"', props)
-                title_match = re.search(r'"t"\s*:\s*"([^"]+)"', props)
+        for chapter_num, urls_content in chapter_matches:
+            # Extraire les URLs du contenu du tableau
+            # Rechercher toutes les URLs entre guillemets
+            url_pattern = r"'([^']+)'"
+            image_urls = re.findall(url_pattern, urls_content)
 
-                if reader_path_match:
-                    reader_path = reader_path_match.group(1)
-                    # Convertir les URLs Google Drive en liens de téléchargement direct si nécessaire
-                    converted_reader_path = convert_google_drive_url(reader_path)
-                    title = (
-                        title_match.group(1)
-                        if title_match
-                        else f"Chapitre {chapter_num}"
-                    )
+            # Convertir les URLs Google Drive en liens de téléchargement direct
+            converted_image_urls = []
+            for url in image_urls:
+                if url.strip():  # Ignorer les URLs vides
+                    converted_url = convert_google_drive_url(url.strip())
+                    converted_image_urls.append(converted_url)
 
-                    chapters.append(
-                        {
-                            "number": chapter_num,
-                            "title": title,
-                            "reader_path": converted_reader_path,
-                        }
-                    )  # Pattern 3: format différent possible
-        if not chapters:
-            chapter_pattern3 = r'eps\.([^.]+)\s*=\s*\{\s*"r"\s*:\s*"([^"]+)"\s*,\s*"t"\s*:\s*"([^"]+)"\s*\};'
-            chapter_matches3 = re.findall(chapter_pattern3, raw_content)
+            page_count = len(converted_image_urls)
 
-            for chapter_num, reader_path, title in chapter_matches3:
-                # Convertir les URLs Google Drive en liens de téléchargement direct si nécessaire
-                converted_reader_path = convert_google_drive_url(reader_path)
+            if page_count > 0:  # Ne garder que les chapitres avec des pages
                 chapters.append(
                     {
                         "number": chapter_num,
-                        "title": title,
-                        "reader_path": converted_reader_path,
+                        "title": f"Chapitre {chapter_num}",
+                        "page_count": page_count,
                     }
-                )  # Pattern 4 supprimé : ne plus extraire les URLs d'images des chapitres
-        # Seules les informations de base du manga sont conservées
+                )
+                print(f"    Chapitre {chapter_num}: {page_count} pages trouvées")
 
         # Trier les chapitres par numéro
         def chapter_sort_key(chapter):
-            # Essayer de convertir en float pour le tri numérique
             try:
-                return float(chapter["number"])
+                return int(chapter["number"])
             except ValueError:
-                # Si ce n'est pas un nombre, utiliser une valeur par défaut élevée
                 return float("inf")
 
         chapters.sort(key=chapter_sort_key)
 
+        print(f"  Total chapters processed: {len(chapters)}")
+
+        # Retourner un dictionnaire avec le nombre total de chapitres et la liste des chapitres
+        return {"total_chapters": len(chapters), "chapters": chapters}
+
     except Exception as e:
         print(f"  Error parsing episodes.js file: {e}")
-        # Optionnellement, on pourrait sauvegarder le contenu brut pour déboguer
-        # with open(f"debug_episodes_{hash(raw_content[:20])}.js", "w", encoding="utf-8") as f:
-        #     f.write(raw_content)
+        # Sauvegarder le contenu brut pour déboguer en cas d'erreur
+        debug_filename = f"debug_episodes_{len(raw_content)}.js"
+        try:
+            with open(debug_filename, "w", encoding="utf-8") as f:
+                f.write(raw_content)
+            print(f"  Debug file saved as: {debug_filename}")
+        except:
+            pass
 
-    return chapters
+    # Retourner une structure vide en cas d'erreur
+    return {"total_chapters": 0, "chapters": []}
+
+
+def process_all_steps_in_order():
+    """
+    Exécute toutes les étapes de scraping dans l'ordre :
+    1. Scrape new anime catalog data
+    2. Load catalog data from JSON
+    3. Fetch scan types for loaded 'Scans' type entries
+    4. Fetch chapters data for items with scan types
+
+    Returns:
+        bool: True si toutes les étapes se sont bien déroulées, False sinon
+    """
+    anime_list_html_file = "anime_list.html"
+    anime_data_json_file = "anime_data.json"
+    current_data_object = None
+
+    try:
+        # Étape 1: Scrape new anime catalog data
+        print("Étape 1/4: Scraping du catalogue d'anime...")
+        anime_list_html = get_anime_list()
+        if not anime_list_html:
+            print("Erreur: Impossible de récupérer la liste HTML des animes")
+            return False
+
+        print("Liste HTML des animes récupérée avec succès.")
+        with open(anime_list_html_file, "w", encoding="utf-8") as file:
+            file.write(anime_list_html)
+
+        # Étape 2: Raffiner les données
+        print("Étape 2/4: Raffinage des données...")
+        refined_anime_data_json_string = refine_data(anime_list_html_file)
+        if not refined_anime_data_json_string:
+            print("Erreur: Aucune donnée raffinée")
+            return False
+
+        try:
+            current_data_object = json.loads(refined_anime_data_json_string)
+            print(f"Données raffinées avec succès: {len(current_data_object)} éléments.")
+            with open(anime_data_json_file, "w", encoding="utf-8") as json_file_out:
+                json.dump(current_data_object, json_file_out, indent=4, ensure_ascii=False)
+            print(f"Données JSON sauvegardées dans {anime_data_json_file}")
+        except json.JSONDecodeError as e:
+            print(f"Erreur de décodage JSON: {e}")
+            return False
+
+        # Étape 3: Fetch scan types
+        print("Étape 3/4: Récupération des types de scan...")
+        if isinstance(current_data_object, list):
+            current_data_object = fetch_scan_page_urls(current_data_object)
+            print("Processus de récupération des types de scan terminé.")
+            with open(anime_data_json_file, "w", encoding="utf-8") as json_file_out_scans:
+                json.dump(current_data_object, json_file_out_scans, indent=4, ensure_ascii=False)
+            print(f"Données mises à jour avec les types de scan sauvegardées dans {anime_data_json_file}")
+        else:
+            print("Erreur: Données non dans le format de liste attendu")
+            return False
+
+        # Étape 4: Fetch chapters data
+        print("Étape 4/4: Récupération des données de chapitres...")
+        if any(item.get("scan_types") for item in current_data_object if isinstance(item, dict)):
+            current_data_object = get_scan_chapters(current_data_object)
+            print("Processus de récupération des données de chapitres terminé.")
+            with open(anime_data_json_file, "w", encoding="utf-8") as json_file_out_chapters:
+                json.dump(current_data_object, json_file_out_chapters, indent=4, ensure_ascii=False)
+            print(f"Données mises à jour avec les chapitres sauvegardées dans {anime_data_json_file}")
+        else:
+            print("Aucun élément avec des types de scan trouvé")
+            return False
+
+        print("✅ Toutes les étapes ont été exécutées avec succès !")
+        return True
+
+    except Exception as e:
+        print(f"Erreur lors de l'exécution des étapes: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return False
 
 
 if __name__ == "__main__":

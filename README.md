@@ -12,7 +12,10 @@ AnimeSamaScrapper est un script Python qui permet d'extraire le catalogue comple
 - Filtrage des entrées par type (Scans et Manhwa uniquement)
 - Identification des différents types de scans disponibles (VF, Spécial VF, etc.)
 - Récupération des informations des chapitres disponibles pour chaque manga
+- **Comptage automatique du nombre total de chapitres par manga**
+- **Comptage automatique du nombre de pages par chapitre (lorsque disponible)**
 - Support de différents formats de fichiers episodes.js
+- **Conversion automatique des URLs Google Drive vers des liens de téléchargement direct**
 
 ## Prérequis
 
@@ -106,16 +109,19 @@ Le fichier JSON généré contient une structure comme celle-ci:
         "url": "https://anime-sama.fr/catalogue/...",
         "id_scan": "123456",
         "episodes_url": "https://anime-sama.fr/catalogue/.../episodes.js?filever=123456",
-        "total_chapters": 42,        "chapters": [
+        "total_chapters": 42,
+        "chapters": [
           {
             "number": "1",
             "title": "Chapitre 1",
-            "reader_path": "reader.php?path=..."
+            "reader_path": "reader.php?path=...",
+            "page_count": 18
           },
           {
             "number": "2",
             "title": "Chapitre 2",
-            "reader_path": "reader.php?path=..."
+            "reader_path": "reader.php?path=...",
+            "page_count": 22
           }
         ]
       }
@@ -202,9 +208,14 @@ db.chapters.findOne({
 
 - Le script supporte le format de données dans le fichier episodes.js:
   - Format objet : `eps["1"] = {"r":"reader.php?path=...","t":"Chapitre 1"};`
+  - Format images : `eps["1"][0] = "image1.jpg"; eps["1"][1] = "image2.jpg";` (pour le comptage des pages)
 - **Conversion automatique des URLs Google Drive** : Le script détecte et convertit automatiquement les liens Google Drive de visualisation vers des liens de téléchargement direct :
   - De : `https://drive.google.com/uc?export=view&id=ID_FICHIER`
   - Vers : `https://drive.usercontent.google.com/download?id=ID_FICHIER&export=view&authuser=0`
+- **Comptage automatique des chapitres et des pages** :
+  - Le nombre total de chapitres est calculé automatiquement
+  - Le nombre de pages par chapitre est détecté lorsque les URLs d'images sont disponibles dans episodes.js
+  - Les informations de comptage sont incluses dans les données JSON finales
 - Plusieurs méthodes de fallback sont implémentées pour gérer les différentes structures de page
 - Des délais sont intégrés pour éviter de surcharger le serveur
 
