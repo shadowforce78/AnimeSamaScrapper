@@ -70,17 +70,17 @@ def insert_mangas_to_db(data):
             # Extraction des chapitres pour insertion séparée
             chapters_data = []
             scan_chapters_copy = []  # Copie pour conserver les données originales
-            
+
             if "scan_chapters" in manga:
                 scan_chapters = manga["scan_chapters"]  # Ne pas utiliser pop() ici
-                
+
                 for scan_type in scan_chapters:
                     # Faire une copie du scan_type pour le manga_doc
                     scan_type_copy = scan_type.copy()
-                    
+
                     if "chapters" in scan_type:
                         chapters = scan_type["chapters"]
-                        
+
                         # Préparation des chapitres pour insertion
                         for chapter in chapters:
                             chapter_doc = {
@@ -95,10 +95,6 @@ def insert_mangas_to_db(data):
                                 "updated_at": datetime.now(),
                             }
 
-                            # Ajout des URLs d'images si disponibles
-                            if "image_urls" in chapter:
-                                chapter_doc["image_urls"] = chapter["image_urls"]
-
                             # Ajout du chemin du reader (compatibilité)
                             if "reader_path" in chapter:
                                 chapter_doc["reader_path"] = chapter["reader_path"]
@@ -109,7 +105,7 @@ def insert_mangas_to_db(data):
                         scan_type_copy["chapters_count"] = len(chapters)
                         # Retirer les chapitres détaillés de la copie pour éviter la duplication
                         scan_type_copy.pop("chapters", None)
-                    
+
                     scan_chapters_copy.append(scan_type_copy)
             # Insertion ou mise à jour des chapitres en premier pour pouvoir calculer les totaux
             if chapters_data:
@@ -145,14 +141,16 @@ def insert_mangas_to_db(data):
 
             # Calculer les totaux depuis la base de données
             manga_title = manga["title"]
-            
+
             # Compter le nombre de chapitres pour ce manga
-            total_chapters = chapters_collection.count_documents({"manga_title": manga_title})
-            
+            total_chapters = chapters_collection.count_documents(
+                {"manga_title": manga_title}
+            )
+
             # Calculer le total de pages pour ce manga
             pipeline_pages = [
                 {"$match": {"manga_title": manga_title}},
-                {"$group": {"_id": None, "total_pages": {"$sum": "$page_count"}}}
+                {"$group": {"_id": None, "total_pages": {"$sum": "$page_count"}}},
             ]
             page_result = list(chapters_collection.aggregate(pipeline_pages))
             total_pages = page_result[0]["total_pages"] if page_result else 0
@@ -181,9 +179,13 @@ def insert_mangas_to_db(data):
 
                 if result.upserted_id:
                     nb_mangas_added += 1
-                    print(f"Manga ajouté: {manga['title']} ({total_chapters} chapitres, {total_pages} pages)")
+                    print(
+                        f"Manga ajouté: {manga['title']} ({total_chapters} chapitres, {total_pages} pages)"
+                    )
                 else:
-                    print(f"Manga mis à jour: {manga['title']} ({total_chapters} chapitres, {total_pages} pages)")
+                    print(
+                        f"Manga mis à jour: {manga['title']} ({total_chapters} chapitres, {total_pages} pages)"
+                    )
 
             except Exception as e:
                 print(f"Erreur lors de l'insertion du manga {manga['title']}: {e}")

@@ -488,48 +488,68 @@ def convert_google_drive_url(url):
 def parse_episodes_js(raw_content):
     """
     Analyser le contenu JavaScript du fichier episodes.js pour extraire les données des chapitres.
-    Le format réel est: var eps[numero] = [array_of_image_urls];
+    Le format peut être:
+    1. var eps[numero] = [array_of_image_urls]; (format classique)
+    2. var eps[numero] = []; eps[numero].length = X; (format avec longueur séparée)
 
     Returns:
         dict: {
             'total_chapters': int,
-            'chapters': list of dict with chapter info including page_count and image_urls
+            'chapters': list of dict with chapter info including page_count
         }
     """
     chapters = []
 
     try:
-        # Pattern principal: var eps[numero] = [tableau d'URLs];
-        # Recherche les variables JavaScript de type "var eps17= [...];"
+        # Pattern 1: var eps[numero] = [tableau d'URLs]; (format classique)
         chapter_pattern = r"var eps(\d+)=\s*\[(.*?)\];"
         chapter_matches = re.findall(chapter_pattern, raw_content, re.DOTALL)
 
         print(f"  Found {len(chapter_matches)} chapter definitions")
 
+        # Pattern 2: eps[numero].length = X; (format avec longueur séparée)
+        length_pattern = r"eps(\d+)\.length\s*=\s*(\d+);"
+        length_matches = re.findall(length_pattern, raw_content)
+        
+        print(f"  Found {len(length_matches)} length definitions")
+
+        # Créer un dictionnaire pour stocker les longueurs définies séparément
+        chapter_lengths = {}
+        for chapter_num, length in length_matches:
+            chapter_lengths[chapter_num] = int(length)
+            print(f"    Length definition: eps{chapter_num}.length = {length}")
+
         for chapter_num, urls_content in chapter_matches:
-            # Extraire les URLs du contenu du tableau
-            # Rechercher toutes les URLs entre guillemets
-            url_pattern = r"'([^']+)'"
-            image_urls = re.findall(url_pattern, urls_content)
-
-            # Convertir les URLs Google Drive en liens de téléchargement direct
-            converted_image_urls = []
-            for url in image_urls:
-                if url.strip():  # Ignorer les URLs vides
-                    converted_url = convert_google_drive_url(url.strip())
-                    converted_image_urls.append(converted_url)
-
-            page_count = len(converted_image_urls)
+            page_count = 0
+            
+            # Vérifier si le contenu du tableau est vide ou contient peu de données
+            urls_content_clean = urls_content.strip()
+            
+            if not urls_content_clean or len(urls_content_clean) < 10:
+                # Tableau vide ou presque, vérifier s'il y a une définition de longueur
+                if chapter_num in chapter_lengths:
+                    page_count = chapter_lengths[chapter_num]
+                    print(f"    Chapitre {chapter_num}: {page_count} pages (via length property)")
+                else:
+                    print(f"    Chapitre {chapter_num}: tableau vide, pas de longueur définie")
+                    continue
+            else:
+                # Format classique : compter les URLs dans le contenu du tableau
+                url_pattern = r"'([^']+)'"
+                image_urls = re.findall(url_pattern, urls_content)
+                
+                # Compter seulement les URLs non vides
+                page_count = len([url for url in image_urls if url.strip()])
+                print(f"    Chapitre {chapter_num}: {page_count} pages trouvées (via comptage URLs)")
 
             if page_count > 0:  # Ne garder que les chapitres avec des pages
-                chapters.append(
-                    {
-                        "number": chapter_num,
-                        "title": f"Chapitre {chapter_num}",
-                        "page_count": page_count,
-                    }
-                )
-                print(f"    Chapitre {chapter_num}: {page_count} pages trouvées")
+                chapter_data = {
+                    "number": chapter_num,
+                    "title": f"Chapitre {chapter_num}",
+                    "page_count": page_count,
+                }
+                
+                chapters.append(chapter_data)
 
         # Trier les chapitres par numéro
         def chapter_sort_key(chapter):
