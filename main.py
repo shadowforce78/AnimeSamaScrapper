@@ -596,9 +596,13 @@ def process_all_steps_in_order():
 
         try:
             current_data_object = json.loads(refined_anime_data_json_string)
-            print(f"Données raffinées avec succès: {len(current_data_object)} éléments.")
+            print(
+                f"Données raffinées avec succès: {len(current_data_object)} éléments."
+            )
             with open(anime_data_json_file, "w", encoding="utf-8") as json_file_out:
-                json.dump(current_data_object, json_file_out, indent=4, ensure_ascii=False)
+                json.dump(
+                    current_data_object, json_file_out, indent=4, ensure_ascii=False
+                )
             print(f"Données JSON sauvegardées dans {anime_data_json_file}")
         except json.JSONDecodeError as e:
             print(f"Erreur de décodage JSON: {e}")
@@ -609,21 +613,43 @@ def process_all_steps_in_order():
         if isinstance(current_data_object, list):
             current_data_object = fetch_scan_page_urls(current_data_object)
             print("Processus de récupération des types de scan terminé.")
-            with open(anime_data_json_file, "w", encoding="utf-8") as json_file_out_scans:
-                json.dump(current_data_object, json_file_out_scans, indent=4, ensure_ascii=False)
-            print(f"Données mises à jour avec les types de scan sauvegardées dans {anime_data_json_file}")
+            with open(
+                anime_data_json_file, "w", encoding="utf-8"
+            ) as json_file_out_scans:
+                json.dump(
+                    current_data_object,
+                    json_file_out_scans,
+                    indent=4,
+                    ensure_ascii=False,
+                )
+            print(
+                f"Données mises à jour avec les types de scan sauvegardées dans {anime_data_json_file}"
+            )
         else:
             print("Erreur: Données non dans le format de liste attendu")
             return False
 
         # Étape 4: Fetch chapters data
         print("Étape 4/4: Récupération des données de chapitres...")
-        if any(item.get("scan_types") for item in current_data_object if isinstance(item, dict)):
+        if any(
+            item.get("scan_types")
+            for item in current_data_object
+            if isinstance(item, dict)
+        ):
             current_data_object = get_scan_chapters(current_data_object)
             print("Processus de récupération des données de chapitres terminé.")
-            with open(anime_data_json_file, "w", encoding="utf-8") as json_file_out_chapters:
-                json.dump(current_data_object, json_file_out_chapters, indent=4, ensure_ascii=False)
-            print(f"Données mises à jour avec les chapitres sauvegardées dans {anime_data_json_file}")
+            with open(
+                anime_data_json_file, "w", encoding="utf-8"
+            ) as json_file_out_chapters:
+                json.dump(
+                    current_data_object,
+                    json_file_out_chapters,
+                    indent=4,
+                    ensure_ascii=False,
+                )
+            print(
+                f"Données mises à jour avec les chapitres sauvegardées dans {anime_data_json_file}"
+            )
         else:
             print("Aucun élément avec des types de scan trouvé")
             return False
