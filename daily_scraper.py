@@ -1,8 +1,29 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Script de scraping automatique pour Anime-Sama
-Exécuté quotidiennement à minuit pour mettre à jour la base de données MongoDB
+Script de scraping automatique pour Anime-Sam        # Étape 4: Mise à jour de la base de données
+        logger.info("Mise à jour de la base de données MongoDB...")
+        nb_mangas_added, nb_chapters_added = insert_mangas_to_db(anime_data_list)
+        logger.info(f"Base de données mise à jour avec succès:")
+        logger.info(f"- {nb_mangas_added} nouveaux mangas ajoutés")
+        logger.info(f"- {nb_chapters_added} nouveaux chapitres ajoutés")
+        
+        # Étape 5: Scraping et mise à jour du planning
+        logger.info("Scraping du planning...")
+        try:
+            planning_data = scrape_planning()
+            if planning_data:
+                logger.info(f"Planning scrapé avec succès. {len(planning_data)} entrées trouvées.")
+                nb_planning_updated = insert_planning_to_db(planning_data)
+                logger.info(f"Planning mis à jour: {nb_planning_updated} entrées ajoutées/mises à jour.")
+            else:
+                logger.warning("Aucune donnée de planning récupérée.")
+        except Exception as e:
+            logger.error(f"Erreur lors du scraping du planning: {e}")
+        
+        # Calculer le temps d'exécution total
+        execution_time = time.time() - start_time
+        logger.info(f"==== FIN DU PROCESSUS DE SCRAPING ({execution_time:.2f} secondes) ====") quotidiennement à minuit pour mettre à jour la base de données MongoDB
 avec les derniers mangas et leurs chapitres/pages disponibles.
 """
 
@@ -21,7 +42,8 @@ from main import (
     refine_data, 
     process_all_steps_in_order
 )
-from add_to_db import insert_mangas_to_db, test_connection
+from add_to_db import insert_mangas_to_db, test_connection, insert_planning_to_db
+from planning import scrape_planning
 
 # Configuration du logging
 log_dir = "logs"

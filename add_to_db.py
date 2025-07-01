@@ -20,6 +20,7 @@ db = client.get_database()
 # Définir les collections
 mangas_collection = db["mangas"]  # Stocke les informations de base des mangas
 chapters_collection = db["chapters"]  # Stocke les chapitres individuels
+planning_collection = db["planning"]  # Stocke le planning des sorties
 
 
 def get_data(jsonfile):
@@ -197,6 +198,61 @@ def insert_mangas_to_db(data):
         return 0, 0
 
 
+def insert_planning_to_db(planning_data):
+    """
+    Insère les données de planning dans MongoDB.
+
+    Args:
+        planning_data (list): Liste des données de planning à insérer
+
+    Returns:
+        int: Nombre d'entrées de planning ajoutées/mises à jour
+    """
+    if not planning_data:
+        print("Aucune donnée de planning à insérer.")
+        return 0
+
+    nb_planning_updated = 0
+
+    try:
+        # Création d'un index sur le nom et l'URL pour accélérer les recherches
+        planning_collection.create_index([("name", pymongo.ASCENDING), ("url", pymongo.ASCENDING)], unique=True)
+
+        # Vider la collection pour la remplacer par les nouvelles données
+        planning_collection.delete_many({})
+        print("Collection planning vidée pour mise à jour complète.")
+
+        # Traitement de chaque entrée de planning
+        for entry in planning_data:
+            # Préparation du document planning
+            planning_doc = {
+                "day": entry["day"],
+                "name": entry["name"],
+                "url": entry["url"],
+                "image": entry["image"],
+                "time": entry["time"],
+                "status": entry["status"],
+                "language": entry["language"],
+                "updated_at": datetime.now(),
+            }
+
+            # Insertion de l'entrée de planning
+            try:
+                result = planning_collection.insert_one(planning_doc)
+                if result.inserted_id:
+                    nb_planning_updated += 1
+
+            except Exception as e:
+                print(f"Erreur lors de l'insertion de l'entrée planning {entry['name']}: {e}")
+
+        print(f"Planning mis à jour: {nb_planning_updated} entrées ajoutées.")
+        return nb_planning_updated
+
+    except Exception as e:
+        print(f"Erreur lors de l'insertion du planning en base de données: {e}")
+        return 0
+
+
 def test_connection():
     """
     Teste la connexion à la base de données MongoDB.
@@ -278,6 +334,44 @@ def get_manga_stats():
         print(f"Erreur lors de la récupération des statistiques: {e}")
 
 
+def get_planning_stats():
+    """
+    Affiche les statistiques du planning depuis la base de données.
+    """
+    try:
+        total_entries = planning_collection.count_documents({})
+        print(f"\n=== STATISTIQUES DU PLANNING ===")
+        print(f"Total des entrées: {total_entries}")
+        
+        # Répartition par jour
+        pipeline = [
+            {"$group": {"_id": "$day", "count": {"$sum": 1}}},
+            {"$sort": {"_id": 1}}
+        ]
+        
+        day_stats = list(planning_collection.aggregate(pipeline))
+        
+        print("\nRépartition par jour:")
+        for stat in day_stats:
+            print(f"  {stat['_id']}: {stat['count']} entrées")
+            
+        # Répartition par statut
+        status_pipeline = [
+            {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}}
+        ]
+        
+        status_stats = list(planning_collection.aggregate(status_pipeline))
+        
+        print("\nRépartition par statut:")
+        for stat in status_stats:
+            status_name = stat['_id'] if stat['_id'] else "Normal"
+            print(f"  {status_name}: {stat['count']} entrées")
+        
+    except Exception as e:
+        print(f"Erreur lors de la récupération des statistiques du planning: {e}")
+
+
 def search_manga(query):
     """
     Recherche un manga dans la base de données par titre.
@@ -336,9 +430,11 @@ if __name__ == "__main__":
         print("1. Ajouter/mettre à jour depuis anime_data.json")
         print("2. Afficher les statistiques de la base de données")
         print("3. Rechercher un manga par titre")
-        print("4. Quitter")
+        print("4. Mettre à jour le planning")
+        print("5. Afficher les statistiques du planning")
+        print("6. Quitter")
 
-        choice = input("\nEntrez votre choix (1-4): ")
+        choice = input("\nEntrez votre choix (1-6): ")
 
         if choice == "1":
             # Importer les données depuis le fichier JSON
@@ -383,9 +479,26 @@ if __name__ == "__main__":
                 print("Veuillez entrer un terme de recherche valide.")
 
         elif choice == "4":
+            # Mettre à jour le planning
+            from planning import scrape_planning
+            print("Scraping du planning en cours...")
+            planning_data = scrape_planning()
+            
+            if planning_data:
+                print(f"\nAjout de {len(planning_data)} entrées de planning à la base de données...")
+                nb_planning = insert_planning_to_db(planning_data)
+                print(f"Opération terminée. {nb_planning} entrées de planning mises à jour.")
+            else:
+                print("Aucune donnée de planning récupérée.")
+
+        elif choice == "5":
+            # Afficher les statistiques du planning
+            get_planning_stats()
+
+        elif choice == "6":
             # Quitter
             print("Au revoir!")
             break
 
         else:
-            print("Option invalide. Veuillez choisir entre 1 et 4.")
+            print("Option invalide. Veuillez choisir entre 1 et 6.")
