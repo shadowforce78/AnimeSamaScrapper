@@ -90,7 +90,24 @@ else
     echo "Toutes les dépendances sont déjà installées."
 fi
 
-echo "[6/7] Test du script principal..."
+echo "[6/7] Test du script principal et de la nouvelle fonctionnalité planning..."
+
+# Test basique des imports principaux
+if ! python3 -c "
+try:
+    from main import process_all_steps_in_order
+    from add_to_db import insert_mangas_to_db, insert_planning_to_db
+    from planning import scrape_planning
+    print('✅ Tous les imports fonctionnent correctement')
+except ImportError as e:
+    print(f'❌ Erreur d\'import: {e}')
+    exit(1)
+"; then
+    echo "ERREUR: Les imports principaux ont échoué."
+    exit 1
+fi
+
+# Test du fichier de test s'il existe
 if [[ -f "test_updated_scripts.py" ]]; then
     if ! python3 test_updated_scripts.py; then
         echo "ATTENTION: Les tests ont échoué. Le service peut ne pas fonctionner correctement."
@@ -102,7 +119,7 @@ if [[ -f "test_updated_scripts.py" ]]; then
         fi
     fi
 else
-    echo "Fichier de test non trouvé, test ignoré."
+    echo "Fichier de test non trouvé, test d'import réussi."
 fi
 
 echo "[7/7] Redémarrage du service..."
