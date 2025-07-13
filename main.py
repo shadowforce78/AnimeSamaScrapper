@@ -9,6 +9,16 @@ url = "https://anime-sama.fr"
 catalog = "/catalogue"
 page_param = "?page="  # Renamed to avoid conflict with page content
 
+def remove_old_files():
+    """
+    Remove old files that are no longer needed.
+    This function can be called at the start of the script to clean up.
+    """
+    files_to_remove = ["anime_list.html", "anime_data.json", "planning_data.json"]
+    for file_name in files_to_remove:
+        if os.path.exists(file_name):
+            os.remove(file_name)
+            print(f"Removed old file: {file_name}")
 
 def get_anime_list():
     all_anime_content = []
