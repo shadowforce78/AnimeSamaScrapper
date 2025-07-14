@@ -61,7 +61,7 @@ def refine_data(html_file_path):
     for anime_div in soup.find_all(
         "div",
         class_="shrink-0 m-3 rounded border-2 border-gray-400 border-opacity-50 shadow-2xl shadow-black hover:shadow-zinc-900 hover:opacity-80 bg-black bg-opacity-40 transition-all duration-200 cursor-pointer",
-    ):
+    ):  
         data = {}
         link_tag = anime_div.find("a", class_="flex divide-x")
         if link_tag:
@@ -407,10 +407,11 @@ def get_scan_chapters(anime_data_list):
                         continue
 
                     # Récupérer le contenu brut
-                    raw_content = (
-                        episodes_response.text
-                    )  # Analyser le contenu JavaScript pour extraire les données des chapitres
-                    chapters_result = parse_episodes_js(raw_content)
+                    raw_content = episodes_response.text
+                    
+                    # Analyser le contenu JavaScript pour extraire les données des chapitres
+                    manga_title = current_item_copy.get("title", "Unknown")
+                    chapters_result = parse_episodes_js(raw_content, manga_title)
 
                     if chapters_result and chapters_result.get("chapters"):
                         chapters_data = chapters_result["chapters"]
@@ -453,54 +454,14 @@ def get_scan_chapters(anime_data_list):
     return updated_anime_data_list
 
 
-def convert_google_drive_url(url):
-    """
-    Convertit une URL Google Drive de visualisation vers une URL de téléchargement direct.
 
-    Args:
-        url (str): URL Google Drive de visualisation
-
-    Returns:
-        str: URL de téléchargement direct ou URL originale si conversion impossible
-    """
-    try:
-        # Vérifier si c'est un lien Google Drive
-        if "drive.google.com" not in url:
-            return url
-
-        # Pattern pour extraire l'ID du fichier Google Drive
-        patterns = [
-            r"drive\.google\.com/uc\?export=view&id=([a-zA-Z0-9_-]+)",  # Format uc?export=view&id=
-            r"drive\.google\.com/file/d/([a-zA-Z0-9_-]+)",  # Format file/d/ID
-            r"id=([a-zA-Z0-9_-]+)",  # Recherche générale d'ID
-        ]
-
-        file_id = None
-        for pattern in patterns:
-            match = re.search(pattern, url)
-            if match:
-                file_id = match.group(1)
-                break
-
-        # Si aucun ID trouvé, retourner l'URL originale
-        if not file_id:
-            return url
-
-        # Construire l'URL de téléchargement direct
-        download_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=view&authuser=0"
-        return download_url
-
-    except Exception as e:
-        print(f"  Erreur lors de la conversion de l'URL Google Drive: {e}")
-        return url
-
-
-def parse_episodes_js(raw_content):
+def parse_episodes_js(raw_content, manga_title="Unknown"):
     """
     Analyser le contenu JavaScript du fichier episodes.js pour extraire les données des chapitres.
     Le format peut être:
     1. var eps[numero] = [array_of_image_urls]; (format classique)
     2. var eps[numero] = []; eps[numero].length = X; (format avec longueur séparée)
+    3. Autres formats possibles
 
     Returns:
         dict: {
@@ -509,13 +470,25 @@ def parse_episodes_js(raw_content):
         }
     """
     chapters = []
+    found_chapters = {}  # Dictionnaire pour éviter les doublons
 
     try:
-        # Pattern 1: var eps[numero] = [tableau d'URLs]; (format classique)
-        chapter_pattern = r"var eps(\d+)=\s*\[(.*?)\];"
-        chapter_matches = re.findall(chapter_pattern, raw_content, re.DOTALL)
-
-        print(f"  Found {len(chapter_matches)} chapter definitions")
+        # DIAGNOSTIC : Analyser d'abord le contenu pour voir tous les chapitres possibles
+        all_possible_chapters = diagnose_episodes_js(raw_content, manga_title)
+        
+        # Pattern amélioré pour capturer plus de formats
+        chapter_patterns = [
+            r"var eps(\d+)\s*=\s*\[(.*?)\];",  # Format standard
+            r"eps\[(\d+)\]\s*=\s*\[(.*?)\];",  # Format avec crochets
+            r"var eps(\d+)=\[(.*?)\];",         # Format sans espaces
+        ]
+        
+        all_chapter_matches = []
+        for pattern in chapter_patterns:
+            matches = re.findall(pattern, raw_content, re.DOTALL)
+            all_chapter_matches.extend(matches)
+            
+        print(f"  Found {len(all_chapter_matches)} chapter definitions across all patterns")
 
         # Pattern 2: eps[numero].length = X; (format avec longueur séparée)
         length_pattern = r"eps(\d+)\.length\s*=\s*(\d+);"
@@ -529,7 +502,12 @@ def parse_episodes_js(raw_content):
             chapter_lengths[chapter_num] = int(length)
             print(f"    Length definition: eps{chapter_num}.length = {length}")
 
-        for chapter_num, urls_content in chapter_matches:
+        # Traitement des chapitres trouvés
+        for chapter_num, urls_content in all_chapter_matches:
+            if chapter_num in found_chapters:
+                print(f"    Chapitre {chapter_num}: déjà traité, ignoré")
+                continue
+                
             page_count = 0
             
             # Vérifier si le contenu du tableau est vide ou contient peu de données
@@ -541,8 +519,8 @@ def parse_episodes_js(raw_content):
                     page_count = chapter_lengths[chapter_num]
                     print(f"    Chapitre {chapter_num}: {page_count} pages (via length property)")
                 else:
-                    print(f"    Chapitre {chapter_num}: tableau vide, pas de longueur définie")
-                    continue
+                    print(f"    Chapitre {chapter_num}: tableau vide, pas de longueur définie - GARDÉ QUAND MÊME")
+                    page_count = 0  # Garder le chapitre même avec 0 pages
             else:
                 # Format classique : compter les URLs dans le contenu du tableau
                 url_pattern = r"'([^']+)'"
@@ -552,14 +530,27 @@ def parse_episodes_js(raw_content):
                 page_count = len([url for url in image_urls if url.strip()])
                 print(f"    Chapitre {chapter_num}: {page_count} pages trouvées (via comptage URLs)")
 
-            if page_count > 0:  # Ne garder que les chapitres avec des pages
+            # CHANGEMENT IMPORTANT : Garder TOUS les chapitres, même avec 0 pages
+            chapter_data = {
+                "number": chapter_num,
+                "title": f"Chapitre {chapter_num}",
+                "page_count": page_count,
+            }
+            
+            chapters.append(chapter_data)
+            found_chapters[chapter_num] = True
+            
+        # Vérifier s'il y a des chapitres dans chapter_lengths qui n'ont pas été trouvés dans les patterns
+        for chapter_num, length in chapter_lengths.items():
+            if chapter_num not in found_chapters:
+                print(f"    Chapitre {chapter_num}: trouvé uniquement via length definition ({length} pages)")
                 chapter_data = {
                     "number": chapter_num,
                     "title": f"Chapitre {chapter_num}",
-                    "page_count": page_count,
+                    "page_count": length,
                 }
-                
                 chapters.append(chapter_data)
+                found_chapters[chapter_num] = True
 
         # Trier les chapitres par numéro
         def chapter_sort_key(chapter):
@@ -571,6 +562,17 @@ def parse_episodes_js(raw_content):
         chapters.sort(key=chapter_sort_key)
 
         print(f"  Total chapters processed: {len(chapters)}")
+        
+        # VERIFICATION FINALE : Comparer avec le diagnostic
+        found_chapter_numbers = set(ch["number"] for ch in chapters)
+        possible_numeric = set(ch for ch in all_possible_chapters if ch.isdigit())
+        
+        if len(found_chapter_numbers) < len(possible_numeric):
+            lost_chapters = possible_numeric - found_chapter_numbers
+            print(f"  ⚠️  ALERTE: {len(lost_chapters)} chapitres perdus pendant le parsing!")
+            print(f"      Chapitres perdus: {sorted(lost_chapters, key=int)[:10]}{'...' if len(lost_chapters) > 10 else ''}")
+        else:
+            print(f"  ✅ Tous les chapitres détectés ont été parsés avec succès")
 
         # Retourner un dictionnaire avec le nombre total de chapitres et la liste des chapitres
         return {"total_chapters": len(chapters), "chapters": chapters}
@@ -589,239 +591,52 @@ def parse_episodes_js(raw_content):
     # Retourner une structure vide en cas d'erreur
     return {"total_chapters": 0, "chapters": []}
 
-
-def process_all_steps_in_order():
+def diagnose_episodes_js(raw_content, manga_title="Unknown"):
     """
-    Exécute toutes les étapes de scraping dans l'ordre :
-    1. Scrape new anime catalog data
-    2. Load catalog data from JSON
-    3. Fetch scan types for loaded 'Scans' type entries
-    4. Fetch chapters data for items with scan types
-
-    Returns:
-        bool: True si toutes les étapes se sont bien déroulées, False sinon
+    Fonction de diagnostic pour analyser le contenu d'un fichier episodes.js
+    et identifier tous les chapitres possibles avec différents patterns.
     """
-    anime_list_html_file = "anime_list.html"
-    anime_data_json_file = "anime_data.json"
-    current_data_object = None
-
-    try:
-        # Étape 1: Scrape new anime catalog data
-        print("Étape 1/4: Scraping du catalogue d'anime...")
-        anime_list_html = get_anime_list()
-        if not anime_list_html:
-            print("Erreur: Impossible de récupérer la liste HTML des animes")
-            return False
-
-        print("Liste HTML des animes récupérée avec succès.")
-        with open(anime_list_html_file, "w", encoding="utf-8") as file:
-            file.write(anime_list_html)
-
-        # Étape 2: Raffiner les données
-        print("Étape 2/4: Raffinage des données...")
-        refined_anime_data_json_string = refine_data(anime_list_html_file)
-        if not refined_anime_data_json_string:
-            print("Erreur: Aucune donnée raffinée")
-            return False
-
-        try:
-            current_data_object = json.loads(refined_anime_data_json_string)
-            print(
-                f"Données raffinées avec succès: {len(current_data_object)} éléments."
-            )
-            with open(anime_data_json_file, "w", encoding="utf-8") as json_file_out:
-                json.dump(
-                    current_data_object, json_file_out, indent=4, ensure_ascii=False
-                )
-            print(f"Données JSON sauvegardées dans {anime_data_json_file}")
-        except json.JSONDecodeError as e:
-            print(f"Erreur de décodage JSON: {e}")
-            return False
-
-        # Étape 3: Fetch scan types
-        print("Étape 3/4: Récupération des types de scan...")
-        if isinstance(current_data_object, list):
-            current_data_object = fetch_scan_page_urls(current_data_object)
-            print("Processus de récupération des types de scan terminé.")
-            with open(
-                anime_data_json_file, "w", encoding="utf-8"
-            ) as json_file_out_scans:
-                json.dump(
-                    current_data_object,
-                    json_file_out_scans,
-                    indent=4,
-                    ensure_ascii=False,
-                )
-            print(
-                f"Données mises à jour avec les types de scan sauvegardées dans {anime_data_json_file}"
-            )
+    print(f"\n=== DIAGNOSTIC episodes.js pour {manga_title} ===")
+    print(f"Taille du contenu: {len(raw_content)} caractères")
+    
+    # Tous les patterns possibles pour détecter des chapitres
+    patterns_to_check = {
+        "var eps + nombre + =": r"var eps(\d+)",
+        "eps[ + nombre + ]": r"eps\[(\d+)\]",
+        "eps + nombre + .length": r"eps(\d+)\.length",
+        "eps + nombre + =": r"eps(\d+)\s*=",
+    }
+    
+    all_found_chapters = set()
+    
+    for pattern_name, pattern in patterns_to_check.items():
+        matches = re.findall(pattern, raw_content)
+        unique_chapters = set(matches)
+        all_found_chapters.update(unique_chapters)
+        print(f"  {pattern_name}: {len(unique_chapters)} chapitres uniques trouvés")
+        if len(unique_chapters) < 20:  # Afficher seulement si pas trop nombreux
+            chapters_list = sorted(unique_chapters, key=lambda x: int(x) if x.isdigit() else float('inf'))
+            print(f"    Chapitres: {chapters_list}")
+    
+    print(f"  TOTAL UNIQUE: {len(all_found_chapters)} chapitres détectés")
+    if all_found_chapters:
+        min_ch = min(all_found_chapters, key=lambda x: int(x) if x.isdigit() else float('inf'))
+        max_ch = max(all_found_chapters, key=lambda x: int(x) if x.isdigit() else float('inf'))
+        print(f"  Range: {min_ch} à {max_ch}")
+    
+    # Vérifier s'il y a des trous dans la séquence
+    numeric_chapters = sorted([int(ch) for ch in all_found_chapters if ch.isdigit()])
+    if numeric_chapters:
+        missing_chapters = []
+        for i in range(numeric_chapters[0], numeric_chapters[-1] + 1):
+            if i not in numeric_chapters:
+                missing_chapters.append(i)
+        
+        if missing_chapters:
+            missing_str = str(missing_chapters[:10]) + ('...' if len(missing_chapters) > 10 else '')
+            print(f"  CHAPITRES MANQUANTS dans la séquence: {missing_str}")
         else:
-            print("Erreur: Données non dans le format de liste attendu")
-            return False
-
-        # Étape 4: Fetch chapters data
-        print("Étape 4/4: Récupération des données de chapitres...")
-        if any(
-            item.get("scan_types")
-            for item in current_data_object
-            if isinstance(item, dict)
-        ):
-            current_data_object = get_scan_chapters(current_data_object)
-            print("Processus de récupération des données de chapitres terminé.")
-            with open(
-                anime_data_json_file, "w", encoding="utf-8"
-            ) as json_file_out_chapters:
-                json.dump(
-                    current_data_object,
-                    json_file_out_chapters,
-                    indent=4,
-                    ensure_ascii=False,
-                )
-            print(
-                f"Données mises à jour avec les chapitres sauvegardées dans {anime_data_json_file}"
-            )
-        else:
-            print("Aucun élément avec des types de scan trouvé")
-            return False
-
-        print("✅ Toutes les étapes ont été exécutées avec succès !")
-        return True
-
-    except Exception as e:
-        print(f"Erreur lors de l'exécution des étapes: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return False
-
-
-if __name__ == "__main__":
-    anime_list_html_file = "anime_list.html"
-    anime_data_json_file = "anime_data.json"
-    current_data_object = None  # To hold the data (list of dicts) in memory
-
-    while True:
-        print("\\\\nMenu:")
-        print("1. Scrape new anime catalog data")
-        if os.path.exists(anime_data_json_file):
-            print(f"2. Load catalog data from {anime_data_json_file}")
-        if current_data_object:
-            # Updated menu option text to reflect scan types
-            print("3. Fetch scan types for loaded 'Scans' type entries")
-            if any(
-                item.get("scan_types")
-                for item in current_data_object
-                if isinstance(item, dict)
-            ):
-                print("4. Fetch chapters data for items with scan types")
-        print("5. Exit")
-
-        choice = input("Enter your choice: ")
-
-        if choice == "1":
-            print("Scraping new data...")
-            anime_list_html = get_anime_list()
-            if anime_list_html:
-                print("Anime list HTML retrieved successfully.")
-                with open(anime_list_html_file, "w", encoding="utf-8") as file:
-                    file.write(anime_list_html)
-
-                refined_anime_data_json_string = refine_data(anime_list_html_file)
-                if refined_anime_data_json_string:
-                    try:
-                        current_data_object = json.loads(refined_anime_data_json_string)
-                        print("\\\\nRefined Anime Data (JSON):")
-                        print(
-                            f"Successfully refined {len(current_data_object) if isinstance(current_data_object, list) else 'N/A'} items."
-                        )
-                        with open(
-                            anime_data_json_file, "w", encoding="utf-8"
-                        ) as json_file_out:
-                            json.dump(
-                                current_data_object,
-                                json_file_out,
-                                indent=4,
-                                ensure_ascii=False,
-                            )
-                        print(f"\\\\nJSON data saved to {anime_data_json_file}")
-                    except json.JSONDecodeError as e:
-                        print(f"Error decoding refined JSON string: {e}")
-                        current_data_object = None
-                else:
-                    print("No data was refined.")
-                    current_data_object = None
-            else:
-                print("Failed to retrieve anime list HTML.")
-                current_data_object = None
-
-        elif choice == "2" and os.path.exists(anime_data_json_file):
-            print(f"Loading data from {anime_data_json_file}...")
-            try:
-                with open(anime_data_json_file, "r", encoding="utf-8") as json_file_in:
-                    current_data_object = json.load(json_file_in)
-                print("\\\\nExisting Anime Data (JSON) loaded:")
-                print(
-                    f"Successfully loaded {len(current_data_object) if isinstance(current_data_object, list) else 'N/A'} items."
-                )
-            except json.JSONDecodeError:
-                print(
-                    f"Error: Could not decode JSON from {anime_data_json_file}. The file might be corrupted."
-                )
-                current_data_object = None
-            except Exception as e:
-                print(f"An error occurred while reading {anime_data_json_file}: {e}")
-                current_data_object = None
-
-        elif choice == "3" and current_data_object:
-            print("Fetching scan types...")  # Updated print
-            if isinstance(current_data_object, list):
-                current_data_object = fetch_scan_page_urls(current_data_object)
-                print("Scan type fetching process complete.")  # Updated print
-                with open(
-                    anime_data_json_file, "w", encoding="utf-8"
-                ) as json_file_out_scans:
-                    json.dump(
-                        current_data_object,
-                        json_file_out_scans,
-                        indent=4,
-                        ensure_ascii=False,
-                    )
-                # Updated print message to reflect scan types
-                print(f"Updated data with scan types saved to {anime_data_json_file}")
-            else:
-                print(
-                    "No data loaded or data is not in the expected list format. Please load or scrape data first."
-                )
-
-        elif (
-            choice == "4"
-            and current_data_object
-            and any(
-                item.get("scan_types")
-                for item in current_data_object
-                if isinstance(item, dict)
-            )
-        ):
-            print("Fetching scan chapters data...")
-            if isinstance(current_data_object, list):
-                current_data_object = get_scan_chapters(current_data_object)
-                print("Scan chapters data fetching process complete.")
-                with open(
-                    anime_data_json_file, "w", encoding="utf-8"
-                ) as json_file_out_chapters:
-                    json.dump(
-                        current_data_object,
-                        json_file_out_chapters,
-                        indent=4,
-                        ensure_ascii=False,
-                    )
-                print(
-                    f"Updated data with scan chapters saved to {anime_data_json_file}"
-                )
-            else:
-                print("No data loaded or data is not in the expected list format.")
-        elif choice == "5":
-            print("Exiting.")
-            break
-        else:
-            print("Invalid choice. Please try again.")
+            print(f"  ✅ Séquence complète de {numeric_chapters[0]} à {numeric_chapters[-1]}")
+    
+    print(f"=== FIN DIAGNOSTIC ===\n")
+    return all_found_chapters

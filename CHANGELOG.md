@@ -80,6 +80,27 @@
 
 ---
 
+## Version 2.1.1 - Fix bug chapitres manquants (16 juin 2025)
+
+### 🐛 Corrections importantes
+
+**Résolution du bug des chapitres manquants :**
+- **Problème identifié** : Certains chapitres étaient exclus si `page_count <= 0`
+- **Solution** : Conservation de TOUS les chapitres détectés, même avec 0 pages
+- **Amélioration des regex** : Ajout de patterns supplémentaires pour capturer plus de formats
+- **Fonction de diagnostic** : Nouvelle fonction `diagnose_episodes_js()` pour analyser et détecter tous les chapitres possibles
+- **Gestion des doublons** : Éviter de traiter plusieurs fois le même chapitre
+- **Logs de vérification** : Alertes quand des chapitres sont perdus pendant le parsing
+
+**Exemple** : Chainsaw Man passait de 207 chapitres détectés à seulement 202 chapitres sauvés
+→ Maintenant, tous les 207 chapitres sont correctement conservés
+
+**Fichiers modifiés :**
+- `main.py` : Refonte complète de `parse_episodes_js()` avec diagnostic
+- Ajout de `diagnose_episodes_js()` pour analyse détaillée
+
+---
+
 # Modifications apportées - Conversion des URLs Google Drive
 
 ## Résumé des changements
