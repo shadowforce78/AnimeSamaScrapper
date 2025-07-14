@@ -11,7 +11,6 @@ import requests
 from main import (
     get_anime_list, 
     refine_data, 
-    process_all_steps_in_order,
     remove_old_files
 )
 from add_to_db import insert_mangas_to_db, test_connection, insert_planning_to_db
@@ -40,7 +39,7 @@ ANIME_DATA_JSON_FILE = "anime_data.json"
 def scrape_and_update_db():
     """
     Fonction principale qui exécute le processus complet de scraping et de mise à jour de la base de données
-    Inclut maintenant le scraping des chapitres et comptage des pages.
+    Récupère uniquement les métadonnées des mangas (pas de scraping des chapitres).
     """
     start_time = time.time()
     logger.info("==== DÉBUT DU PROCESSUS DE SCRAPING QUOTIDIEN ====")
@@ -51,55 +50,62 @@ def scrape_and_update_db():
             logger.error("Impossible de se connecter à la base de données MongoDB. Arrêt du processus.")
             return False
 
-        # Étape 2: Exécuter toutes les étapes de scraping dans l'ordre
-        logger.info("Exécution du processus complet de scraping (4 étapes)...")
+        # Étape 2: Récupérer le catalogue d'Anime-Sama (métadonnées uniquement)
+        logger.info("Récupération du catalogue d'Anime-Sama...")
         
-        # Etape intermédiaire: Suppression des anciens fichiers
+        # Etape 2.1: Suppression des anciens fichiers
         remove_old_files()
         logger.info("Suppression des anciens fichiers temporaires...")
         
-        # Utilise la fonction process_all_steps_in_order du script principal
-        # qui exécute les 4 étapes : récupération HTML, raffinage, scan des chapitres, et sauvegarde
-        success = process_all_steps_in_order()
-        
-        if not success:
-            logger.error("Échec du processus de scraping. Arrêt du processus.")
+        # Etape 2.2: Scraping du catalogue HTML
+        anime_list_html = get_anime_list()
+        if not anime_list_html:
+            logger.error("Échec de la récupération du catalogue. Arrêt du processus.")
             return False
         
-        logger.info("Processus de scraping terminé avec succès.")
+        # Sauvegarde du HTML brut
+        with open(ANIME_LIST_HTML_FILE, "w", encoding="utf-8") as file:
+            file.write(anime_list_html)
+        logger.info(f"HTML du catalogue sauvegardé dans {ANIME_LIST_HTML_FILE}")
         
-        # Étape 3: Charger les données générées
-        logger.info("Chargement des données générées pour insertion en base...")
+        # Etape 2.3: Raffinage des données (métadonnées des mangas uniquement)
+        logger.info("Analyse et filtrage des données du catalogue...")
+        refined_anime_data_json_string = refine_data(ANIME_LIST_HTML_FILE)
+        if not refined_anime_data_json_string:
+            logger.error("Échec du raffinement des données. Arrêt du processus.")
+            return False
+        
+        # Conversion en objet Python
         try:
-            with open(ANIME_DATA_JSON_FILE, 'r', encoding='utf-8') as f:
-                anime_data_list = json.load(f)
-            logger.info(f"Données chargées avec succès. {len(anime_data_list)} mangas trouvés.")
+            anime_data_list = json.loads(refined_anime_data_json_string)
+            logger.info(f"Données raffinées avec succès. {len(anime_data_list)} mangas trouvés.")
             
-            # Calculer les statistiques avant insertion
-            total_chapters = sum(
-                sum(scan.get('total_chapters', 0) for scan in manga.get('scan_chapters', []))
-                for manga in anime_data_list
-            )
-            total_pages = sum(
-                sum(
-                    sum(chapter.get('page_count', 0) for chapter in scan.get('chapters', []))
-                    for scan in manga.get('scan_chapters', [])
-                )
-                for manga in anime_data_list
-            )
+            # Sauvegarde des données raffinées
+            with open(ANIME_DATA_JSON_FILE, "w", encoding="utf-8") as json_file_out:
+                json.dump(anime_data_list, json_file_out, indent=4, ensure_ascii=False)
+            logger.info(f"Données raffinées sauvegardées dans {ANIME_DATA_JSON_FILE}")
             
-            logger.info(f"Statistiques des données: {total_chapters} chapitres, {total_pages} pages")
-            
-        except Exception as e:
-            logger.error(f"Erreur lors du chargement des données: {e}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Erreur lors de la conversion JSON: {e}")
             return False
+        
+        logger.info("Processus de scraping des métadonnées terminé avec succès.")
+        
+        # Étape 3: Les données sont déjà chargées dans anime_data_list
+        logger.info("Préparation des données pour insertion en base...")
+        
+        # Calculer les statistiques avant insertion (métadonnées uniquement)
+        logger.info(f"Statistiques des données: {len(anime_data_list)} mangas (métadonnées uniquement)")
         
         # Étape 4: Insérer ou mettre à jour les données dans MongoDB
         logger.info("Mise à jour de la base de données MongoDB...")
         nb_mangas_added, nb_chapters_added = insert_mangas_to_db(anime_data_list)
         logger.info(f"Base de données mise à jour avec succès:")
         logger.info(f"- {nb_mangas_added} nouveaux mangas ajoutés")
-        logger.info(f"- {nb_chapters_added} nouveaux chapitres ajoutés")
+        if nb_chapters_added > 0:
+            logger.info(f"- {nb_chapters_added} nouveaux chapitres ajoutés")
+        else:
+            logger.info("- Aucun nouveau chapitre (métadonnées uniquement)")
         
         # Etape 5: Scraper le planning et l'insérer dans la base de données
         logger.info("Scraping du planning des sorties...")
@@ -110,7 +116,7 @@ def scrape_and_update_db():
             logger.info("Planning inséré dans la base de données avec succès.")
         else:
             logger.warning("Aucune donnée de planning trouvée ou erreur lors du scraping du planning.")
-        logger.info("Processus de scraping et mise à jour de la base de données terminé avec succès.")
+        logger.info("Processus de scraping des métadonnées et mise à jour de la base de données terminé avec succès.")
         
         
         # Calculer le temps d'exécution total
@@ -162,14 +168,14 @@ def setup_schedule():
     """
     schedule.every().day.at("00:00").do(run_scheduled_job)
     logger.info("Job planifié tous les jours à minuit (00:00)")
-    logger.info("Le job comprend maintenant le scraping complet des chapitres et pages")
+    logger.info("Le job comprend le scraping des métadonnées des mangas uniquement")
 
 def run_once():
     """
     Exécute le job une seule fois immédiatement
     Utile pour les tests ou les exécutions manuelles
     """
-    logger.info("Exécution immédiate du job complet (avec scraping des chapitres)...")
+    logger.info("Exécution immédiate du job de scraping des métadonnées...")
     run_scheduled_job()
 
 def start_scheduler():
@@ -187,7 +193,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Script de scraping automatique pour Anime-Sama")
-    parser.add_argument("--now", action="store_true", help="Exécuter le scraping complet immédiatement")
+    parser.add_argument("--now", action="store_true", help="Exécuter le scraping des métadonnées immédiatement")
     parser.add_argument("--schedule", action="store_true", help="Démarrer le scheduler (par défaut)")
     parser.add_argument("--test-db", action="store_true", help="Tester uniquement la connexion à la base de données")
     
@@ -207,7 +213,7 @@ if __name__ == "__main__":
     else:
         # Mode scheduler
         try:
-            logger.info("Mode scheduler activé. Le scraping complet sera exécuté quotidiennement à minuit.")
+            logger.info("Mode scheduler activé. Le scraping des métadonnées sera exécuté quotidiennement à minuit.")
             # Exécuter une première fois au démarrage
             run_scheduled_job()
             # Puis configurer le scheduler
