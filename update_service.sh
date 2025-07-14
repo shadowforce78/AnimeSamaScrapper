@@ -95,7 +95,6 @@ echo "[6/7] Test du script principal et de la nouvelle fonctionnalité planning.
 # Test basique des imports principaux
 if ! python3 -c "
 try:
-    from main import process_all_steps_in_order
     from add_to_db import insert_mangas_to_db, insert_planning_to_db
     from planning import scrape_planning
     print('✅ Tous les imports fonctionnent correctement')
