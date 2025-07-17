@@ -17,6 +17,7 @@ from main import (
 )
 from add_to_db import insert_mangas_to_db, test_connection, insert_planning_to_db
 from planning import scrape_planning
+from homepage_db import scrape_homepage_to_db
 
 # Configuration du logging
 log_dir = "logs"
@@ -145,6 +146,15 @@ def scrape_and_update_db():
             logger.info("Planning inséré dans la base de données avec succès.")
         else:
             logger.warning("Aucune donnée de planning trouvée ou erreur lors du scraping du planning.")
+        
+        # Etape 8: Scraper la homepage et l'insérer dans la base de données
+        logger.info("Scraping de la homepage (derniers scans, classiques, pépites)...")
+        homepage_success = scrape_homepage_to_db()
+        if homepage_success:
+            logger.info("Homepage scrapée et sauvegardée en base de données avec succès.")
+        else:
+            logger.warning("Erreur lors du scraping de la homepage.")
+        
         logger.info("Processus de scraping complet et mise à jour de la base de données terminé avec succès.")
         
         
@@ -197,7 +207,7 @@ def setup_schedule():
     """
     schedule.every().day.at("00:00").do(run_scheduled_job)
     logger.info("Job planifié tous les jours à minuit (00:00)")
-    logger.info("Le job comprend le scraping complet: mangas, chapitres et pages (sans URLs d'images)")
+    logger.info("Le job comprend le scraping complet: mangas, chapitres, pages, planning et homepage (derniers scans, classiques, pépites)")
 
 def run_once():
     """

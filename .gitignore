@@ -1,9 +1,8 @@
 .qodo
 .venv
 __pycache__
-anime_data.json
-anime_list.html
+*html
+*json
 .env
 manga_downloads/
 logs
-planning_data.json

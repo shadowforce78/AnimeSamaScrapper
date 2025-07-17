@@ -21,8 +21,7 @@ db = client.get_database()
 mangas_collection = db["mangas"]  # Stocke les informations de base des mangas
 chapters_collection = db["chapters"]  # Stocke les chapitres individuels
 planning_collection = db["planning"]  # Stocke le planning des sorties
-
-
+homepage_collection = db["homepage"]  # Stocke les données de la homepage
 def get_data(jsonfile):
     """
     Fonction pour récupérer les données d'un fichier JSON et les insérer dans la base de données MongoDB.
@@ -502,3 +501,21 @@ if __name__ == "__main__":
 
         else:
             print("Option invalide. Veuillez choisir entre 1 et 6.")
+
+
+# Fonctions d'accès aux collections pour les autres modules
+def get_manga_collection():
+    """Retourne la collection des mangas"""
+    return mangas_collection
+
+def get_chapters_collection():
+    """Retourne la collection des chapitres"""
+    return chapters_collection
+
+def get_planning_collection():
+    """Retourne la collection du planning"""
+    return planning_collection
+
+def get_homepage_collection():
+    """Retourne la collection de la homepage"""
+    return homepage_collection
